@@ -1,0 +1,30 @@
+# LLM and LangGraph
+langgraph
+langchain
+langchain-groq
+
+# Streamlit UI
+streamlit
+
+# Environment management
+python-dotenv
+
+# Vectorstore for skill matching (optional but recommended)
+faiss-cpu
+
+# YouTube video search
+google-api-python-client
+
+# Data handling and validation
+pydantic
+pandas
+
+# PDF/Doc parsing (for resumes and JDs)
+unstructured
+pdfminer.six
+
+# For DB handling (SQLite/Postgres - depending on what you use)
+sqlalchemy
+
+# embedding models (can remove if not used)
+sentence-transformers
