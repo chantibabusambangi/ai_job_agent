@@ -1,7 +1,7 @@
 import streamlit as st
 from langgraph.graph import StateGraph, END
 from langchain.document_loaders import PyPDFLoader, TextLoader
-from resume_skill_match_agent import resume_skill_match_agent
+from resume_score_agent import resume_skill_match_agent
 from email_agent import email_agent
 from youtube_utility import youtube_utility
 
