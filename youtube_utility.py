@@ -16,8 +16,9 @@ headers = {
 }
 
 def suggest_youtube_channels(missing_skills):
-    if not missing_skills:
+    if not missing_skills or not isinstance(missing_skills, list):
         return "🎉 Congratulations! You have all the required skills for this job."
+
 
     # Create a comma-separated string of skills
     skills_str = ', '.join(missing_skills)
