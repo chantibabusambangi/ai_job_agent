@@ -28,11 +28,18 @@ uploaded_jd = st.file_uploader("📄 Upload Job Description (PDF or .txt)", type
 user_email = st.text_input("📧 Enter your Email")
 
 # Convert file to text
+import tempfile
+from langchain.document_loaders import PyPDFLoader
+
 def convert_to_text(uploaded_file):
     if uploaded_file.name.endswith(".pdf"):
-        return PyPDFLoader(uploaded_file).load()[0].page_content
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            tmp.write(uploaded_file.read())
+            tmp_path = tmp.name
+        return PyPDFLoader(tmp_path).load()[0].page_content
     else:
-        return TextLoader(uploaded_file).load()[0].page_content
+        return uploaded_file.read().decode("utf-8")
+
 
 if st.button("🚀 Run AI Agent Pipeline"):
     if not uploaded_resume or not uploaded_jd or not user_email:
