@@ -15,15 +15,18 @@ headers = {
     "Content-Type": "application/json"
 }
 
-def youtube_utility(missing_skills):
+
+def youtube_utility(state):
+    missing_skills = state.get("missing_skills", [])
+    
     if not missing_skills or not isinstance(missing_skills, list):
-        return "🎉 Congratulations! You have all the required skills for this job."
+        return {
+            **state,
+            "youtube_links": ["🎉 Congratulations! You have all the required skills for this job."]
+        }
 
-
-    # Create a comma-separated string of skills
     skills_str = ', '.join(missing_skills)
 
-    # Prompt to the LLM
     prompt = (
         f"Suggest 5 to 7 of the best YouTube channels or video series to learn the following skills: "
         f"{skills_str}. Only return the channel/video title and link. Avoid unnecessary text."
@@ -38,19 +41,34 @@ def youtube_utility(missing_skills):
         "temperature": 0.7
     }
 
-    # Call the Groq API
-    response = requests.post(API_URL, headers=headers, json=payload)
+    response = requests.post(API_URL, headers=headers, json=payload, timeout=25)
+
 
     if response.status_code == 200:
         content = response.json()['choices'][0]['message']['content'].strip()
-        return content
+        youtube_links = content.splitlines()  # Break into list
+        return {
+            **state,
+            "youtube_links": youtube_links
+        }
     else:
-        return f"❌ Error {response.status_code}: {response.text}"
+        return {
+            **state,
+            "youtube_links": [f"❌ Error {response.status_code}: {response.text}"]
+        }
+
+
 
 # Example usage
 if __name__ == "__main__":
-    # Sample input
-    skills = ["Redis", "Docker", "Kafka"]
-    result = suggest_youtube_channels(skills)
+    skills_input = input("Enter missing skills (comma-separated): ").strip()
+    skills = [s.strip() for s in skills_input.split(",") if s.strip()]
+
+    sample_state = {
+        "missing_skills": skills
+    }
+
+    result = youtube_utility(sample_state)
     print("\n📺 YouTube Suggestions:\n")
-    print(result)
+    for link in result.get("youtube_links", []):
+        print(link)
