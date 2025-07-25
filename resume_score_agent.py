@@ -1,74 +1,53 @@
-from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.runnables import Runnable
-from langchain.chains import LLMChain
-from langchain.prompts import PromptTemplate
-from langchain.chat_models import ChatOpenAI
+from sentence_transformers import SentenceTransformer, util
+from typing import TypedDict
+from langchain_core.runnables import RunnableConfig
+import torch
 
-# System prompt to define agent’s behavior
-system_template = """
-You are an expert career coach AI. 
-Given a candidate's resume and a job description, your job is to:
-1. Extract relevant skills from the resume and job description.
-2. Match them to compute a resume-job fit score out of 100.
-3. Identify and list missing skills (i.e., required in JD but missing in resume).
-Be fair, thorough, and actionable in your analysis.
-"""
+# Load model once globally
+model = SentenceTransformer('all-MiniLM-L6-v2')
 
-# Create a prompt for the LLM
-prompt_template = PromptTemplate(
-    template="""
-    [RESUME]:
-    {resume_text}
+# Input/Output schema
+class ResumeInput(TypedDict):
+    resume_text: str
+    jd_text: str
+    job_skills: list[str]
 
-    [JOB DESCRIPTION]:
-    {jd_text}
+class ResumeOutput(ResumeInput):
+    resume_score: float
+    missing_skills: list[str]
+    reasoning: str
 
-    Please perform the following:
-    - Extract the top relevant skills from both documents.
-    - Compute a similarity score (0 to 100) based on skills match.
-    - List all missing skills.
-    Respond in JSON format:
-    {{
-        "score": <int>,
-        "missing_skills": [<skill_1>, <skill_2>, ...],
-        "analysis": "<summary of the reasoning>"
-    }}
-    """,
-    input_variables=["resume_text", "jd_text"]
-)
+def score_resume_vs_jd(inputs: ResumeInput, config: RunnableConfig = None) -> ResumeOutput:
+    resume = inputs["resume_text"]
+    jd = inputs["jd_text"]
+    job_skills = inputs["job_skills"]
 
-# Define the chain using LangChain agent-like behavior
-llm = ChatOpenAI(temperature=0.2, model="gpt-3.5-turbo")
-chain = LLMChain(llm=llm, prompt=prompt_template)
+    # Encode resume and JD
+    emb_resume = model.encode(resume, convert_to_tensor=True)
+    emb_jd = model.encode(jd, convert_to_tensor=True)
 
-# Define the actual runnable node
-def resume_skill_match_agent(state):
-    resume_text = state["resume_text"]
-    jd_text = state["jd_text"]
+    # Compute overall similarity score
+    score = float(util.cos_sim(emb_resume, emb_jd).item() * 100)
 
-    # Run chain with inputs
-    response = chain.run({
-        "resume_text": resume_text,
-        "jd_text": jd_text
-    })
+    # Identify missing skills
+    missing_skills = []
+    for skill in job_skills:
+        emb_skill = model.encode(skill, convert_to_tensor=True)
+        similarity = util.cos_sim(emb_skill, emb_resume).item()
+        if similarity < 0.6:
+            missing_skills.append(skill)
 
-    # Optional: convert string response to dict
-    import json
-    try:
-        result_json = json.loads(response)
-    except Exception:
-        result_json = {
-            "score": 0,
-            "missing_skills": [],
-            "analysis": "Unable to parse response."
-        }
+    # Reasoning logic
+    if score > 75:
+        reasoning = "High similarity indicates good alignment with the JD."
+    elif score > 50:
+        reasoning = "Moderate alignment. Some key skills may be missing or weakly represented."
+    else:
+        reasoning = "Low alignment. Resume may not be a good fit for the JD."
 
-    # Return updated state (agentic behavior: communicate with others)
     return {
-        **state,
-        "score": result_json["score"],
-        "missing_skills": result_json["missing_skills"],
-        "analysis": result_json["analysis"],
-        "result": f"Resume Score: {result_json['score']}/100\n\nMissing Skills: {', '.join(result_json['missing_skills']) if result_json['missing_skills'] else 'None'}\n\nAnalysis: {result_json['analysis']}"
+        **inputs,
+        "resume_score": round(score, 2),
+        "missing_skills": missing_skills,
+        "reasoning": reasoning
     }
-
