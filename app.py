@@ -71,8 +71,6 @@ if st.button("🚀 Run AI Agent Pipeline", disabled=button_disabled):
     try:
         output = graph.invoke(state)
         st.subheader("✅ Final Agent Output:")
-        st.write(output.get("result", "No result returned."))  
-    
         if "score" in output:
             st.metric("📊 Resume Match Score", f"{output['score']:.2f}%")
     
