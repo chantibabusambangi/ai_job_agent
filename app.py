@@ -50,6 +50,8 @@ def convert_to_text(uploaded_file):
         return PyPDFLoader(tmp_path).load()[0].page_content
     else:
         return uploaded_file.read().decode("utf-8")
+if not uploaded_resume or not uploaded_jd or not user_email:
+    st.info("👉 Please upload Resume, Job Description, and enter Email before running the pipeline.")
 button_disabled = not (uploaded_resume and uploaded_jd and user_email)
 if st.button("🚀 Run AI Agent Pipeline", disabled=button_disabled):
     st.info("Running Resume Skill Match → YouTube Suggestions → Email Agent...")
