@@ -1,5 +1,6 @@
 import re
 import os
+import uuid
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -9,12 +10,16 @@ from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
-from langchain_groq import ChatGroq  # ✅ Groq LLM added
+from langchain_groq import ChatGroq
+import streamlit as st  # Optional, for error display in Streamlit apps
 
+# Load environment variables
 load_dotenv()
 
 # ✅ Initialize Groq LLM (agent-specific)
 llm = ChatGroq(api_key=os.getenv("GROQ_API_KEY"), model="mixtral-8x7b-32768")
+
+# ------------------------ Extracting Info ------------------------
 
 def extract_candidate_name(text):
     name_line = next((line for line in text.split('\n') if 'name' in line.lower()), None)
@@ -25,32 +30,40 @@ def extract_candidate_name(text):
     return "Candidate"
 
 def extract_skills(text):
-    skills_keywords = ["Python", "Machine Learning", "Deep Learning", "SQL", "NLP", "Computer Vision", "Data Analysis", "Java", "C++", "HTML", "CSS", "JavaScript"]
+    skills_keywords = [
+        "Python", "Machine Learning", "Deep Learning", "SQL", "NLP", "Computer Vision",
+        "Data Analysis", "Java", "C++", "HTML", "CSS", "JavaScript"
+    ]
     return [skill for skill in skills_keywords if skill.lower() in text.lower()]
 
-# ✅ Replaced get_llm_response with Groq call
+# ------------------------ PDF + LLM Utilities ------------------------
+
 def generate_cover_letter(resume_text, jd_text):
     prompt = f"""
-    Given the following resume:
-    {resume_text}
+You are a professional resume and cover letter expert. Based on the following:
 
-    And this job description:
-    {jd_text}
+Resume:
+{resume_text}
 
-    Write a personalized and professional cover letter matching the job role.
-    """
+Job Description:
+{jd_text}
+
+Write a concise, professional, and personalized cover letter that aligns the candidate's skills with the job.
+"""
     return llm.invoke([HumanMessage(content=prompt)]).content
 
 def generate_qa_guide(resume_text, jd_text):
     prompt = f"""
-    Given the resume:
-    {resume_text}
+You are an expert technical recruiter.
 
-    And this job description:
-    {jd_text}
+Given this Resume:
+{resume_text}
 
-    Generate a list of top 10 possible interview questions and answers.
-    """
+And Job Description:
+{jd_text}
+
+Generate 10 likely interview questions along with model answers that the candidate can prepare.
+"""
     return llm.invoke([HumanMessage(content=prompt)]).content
 
 def save_text_to_pdf(text, filename):
@@ -65,15 +78,19 @@ def save_text_to_pdf(text, filename):
         y -= 14
     c.save()
 
+# ------------------------ Email Utilities ------------------------
+
 def send_email_with_attachments(to_email, subject, body, attachments):
     from_email = os.getenv("EMAIL_USER")
     from_password = os.getenv("EMAIL_PASS")
+
+    if not from_email or not from_password:
+        raise ValueError("Email credentials are missing in environment variables.")
 
     message = MIMEMultipart()
     message['From'] = from_email
     message['To'] = to_email
     message['Subject'] = subject
-
     message.attach(MIMEText(body, 'plain'))
 
     for filepath in attachments:
@@ -92,29 +109,36 @@ def send_email_with_attachments(to_email, subject, body, attachments):
         server.login(from_email, from_password)
         server.send_message(message)
 
+# ------------------------ Main Agent ------------------------
+
 def email_agent(resume_text, jd_text, user_email):
     candidate_name = extract_candidate_name(resume_text)
     candidate_skills = extract_skills(resume_text)
-    
+
     try:
         cover_letter = generate_cover_letter(resume_text, jd_text)
     except Exception as e:
-        print(f"[ERROR] Failed to generate cover letter: {e}")
+        st.error(f"[ERROR] Cover Letter Generation Failed: {e}")
         cover_letter = "Unable to generate cover letter at this time."
-    
+
     try:
         qa_guide = generate_qa_guide(resume_text, jd_text)
     except Exception as e:
-        print(f"[ERROR] Failed to generate Q&A: {e}")
+        st.error(f"[ERROR] Q&A Generation Failed: {e}")
         qa_guide = "Unable to generate Q&A at this time."
-        
-    save_text_to_pdf(cover_letter, "cover_letter.pdf")
-    save_text_to_pdf(qa_guide, "qa_guide.pdf")
 
-    subject = "Your Personalized Cover Letter & Interview Q&A Guide"
-    body = f"Hi {candidate_name},\n\nPlease find attached your auto-generated cover letter and interview Q&A guide.\n\nGood luck!"
-    attachments = ["cover_letter.pdf", "qa_guide.pdf"]
+    # Use unique filenames to avoid collision
+    cl_file = f"cover_letter_{uuid.uuid4().hex[:6]}.pdf"
+    qa_file = f"qa_guide_{uuid.uuid4().hex[:6]}.pdf"
 
-    send_email_with_attachments(user_email, subject, body, attachments)
+    save_text_to_pdf(cover_letter, cl_file)
+    save_text_to_pdf(qa_guide, qa_file)
 
-    print(f"[INFO] Email sent to {user_email} with attachments.")
+    subject = "📄 Your Personalized Cover Letter & Interview Guide"
+    body = f"Hi {candidate_name},\n\nAttached are your AI-generated cover letter and interview Q&A guide.\n\nGood luck with your application!\n\nRegards,\nAI Job Agent"
+
+    try:
+        send_email_with_attachments(user_email, subject, body, [cl_file, qa_file])
+        st.success(f"✅ Email sent to {user_email} with the generated documents.")
+    except Exception as e:
+        st.error(f"❌ Failed to send email: {e}")
