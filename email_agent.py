@@ -111,6 +111,7 @@ def send_email_with_attachments(to_email, subject, body, attachments):
 
 # ------------------------ Main Agent ------------------------
 
+
 def email_agent(resume_text, jd_text, user_email):
     candidate_name = extract_candidate_name(resume_text)
     candidate_skills = extract_skills(resume_text)
@@ -142,3 +143,10 @@ def email_agent(resume_text, jd_text, user_email):
         st.success(f"✅ Email sent to {user_email} with the generated documents.")
     except Exception as e:
         st.error(f"❌ Failed to send email: {e}")
+def email_agent_node(state):
+    resume_text = state["resume_text"]
+    jd_text = state["jd_text"]
+    user_email = state["user_email"]
+    email_agent(resume_text, jd_text, user_email)
+    return state  # return unchanged or modified state as needed
+
