@@ -1,95 +1,120 @@
+import re
+import os
 import smtplib
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from email.mime.application import MIMEApplication
-import os
-from fpdf import FPDF
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from dotenv import load_dotenv
+from langchain_core.messages import HumanMessage
+from langchain_groq import ChatGroq  # ✅ Groq LLM added
 
-# ---------------------- PDF Generation ----------------------
+load_dotenv()
 
-def generate_cover_letter_pdf(cover_text, filename="Cover_Letter.pdf"):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.set_font("Arial", size=12)
-    for line in cover_text.split('\n'):
-        pdf.multi_cell(0, 10, line)
-    pdf.output(filename)
-    print(f"✅ Cover letter PDF saved as: {filename}")
+# ✅ Initialize Groq LLM (agent-specific)
+llm = ChatGroq(api_key=os.getenv("GROQ_API_KEY"), model="mixtral-8x7b-32768")
 
-def generate_qa_pdf(qa_dict, filename="QA_Match.pdf"):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.set_font("Arial", size=12)
-    for q, a in qa_dict.items():
-        pdf.multi_cell(0, 10, f"Q: {q}")
-        pdf.multi_cell(0, 10, f"A: {a}\n")
-    pdf.output(filename)
-    print(f"✅ Q&A PDF saved as: {filename}")
+def extract_candidate_name(text):
+    name_line = next((line for line in text.split('\n') if 'name' in line.lower()), None)
+    if name_line:
+        name_match = re.search(r'([A-Z][a-z]+(?:\s[A-Z][a-z]+)+)', name_line)
+        if name_match:
+            return name_match.group(1).strip()
+    return "Candidate"
 
-# ---------------------- Email Sending ----------------------
+def extract_skills(text):
+    skills_keywords = ["Python", "Machine Learning", "Deep Learning", "SQL", "NLP", "Computer Vision", "Data Analysis", "Java", "C++", "HTML", "CSS", "JavaScript"]
+    return [skill for skill in skills_keywords if skill.lower() in text.lower()]
 
-def send_email_with_attachments(sender_email, sender_password, receiver_email, subject, body, attachment_paths):
-    msg = MIMEMultipart()
-    msg["From"] = sender_email
-    msg["To"] = receiver_email
-    msg["Subject"] = subject
-    msg.attach(MIMEText(body, "plain"))
+# ✅ Replaced get_llm_response with Groq call
+def generate_cover_letter(resume_text, jd_text):
+    prompt = f"""
+    Given the following resume:
+    {resume_text}
 
-    for path in attachment_paths:
-        try:
-            with open(path, "rb") as f:
-                part = MIMEApplication(f.read(), Name=os.path.basename(path))
-                part['Content-Disposition'] = f'attachment; filename="{os.path.basename(path)}"'
-                msg.attach(part)
-        except Exception as e:
-            print(f"❌ Error attaching file {path}: {e}")
-            return
+    And this job description:
+    {jd_text}
 
+    Write a personalized and professional cover letter matching the job role.
+    """
+    return llm.invoke([HumanMessage(content=prompt)]).content
+
+def generate_qa_guide(resume_text, jd_text):
+    prompt = f"""
+    Given the resume:
+    {resume_text}
+
+    And this job description:
+    {jd_text}
+
+    Generate a list of top 10 possible interview questions and answers.
+    """
+    return llm.invoke([HumanMessage(content=prompt)]).content
+
+def save_text_to_pdf(text, filename):
+    c = canvas.Canvas(filename, pagesize=letter)
+    width, height = letter
+    y = height - 40
+    for line in text.split('\n'):
+        if y < 40:
+            c.showPage()
+            y = height - 40
+        c.drawString(40, y, line[:110])
+        y -= 14
+    c.save()
+
+def send_email_with_attachments(to_email, subject, body, attachments):
+    from_email = os.getenv("EMAIL_USER")
+    from_password = os.getenv("EMAIL_PASS")
+
+    message = MIMEMultipart()
+    message['From'] = from_email
+    message['To'] = to_email
+    message['Subject'] = subject
+
+    message.attach(MIMEText(body, 'plain'))
+
+    for filepath in attachments:
+        with open(filepath, "rb") as attachment:
+            part = MIMEBase("application", "octet-stream")
+            part.set_payload(attachment.read())
+            encoders.encode_base64(part)
+            part.add_header(
+                "Content-Disposition",
+                f"attachment; filename= {os.path.basename(filepath)}",
+            )
+            message.attach(part)
+
+    with smtplib.SMTP("smtp.gmail.com", 587) as server:
+        server.starttls()
+        server.login(from_email, from_password)
+        server.send_message(message)
+
+def email_agent(resume_text, jd_text, user_email):
+    candidate_name = extract_candidate_name(resume_text)
+    candidate_skills = extract_skills(resume_text)
+    
     try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(sender_email, sender_password)
-            server.send_message(msg)
-        print("✅ Email sent successfully.")
+        cover_letter = generate_cover_letter(resume_text, jd_text)
     except Exception as e:
-        print(f"❌ Error sending email: {e}")
+        print(f"[ERROR] Failed to generate cover letter: {e}")
+        cover_letter = "Unable to generate cover letter at this time."
+    
+    try:
+        qa_guide = generate_qa_guide(resume_text, jd_text)
+    except Exception as e:
+        print(f"[ERROR] Failed to generate Q&A: {e}")
+        qa_guide = "Unable to generate Q&A at this time."
+        
+    save_text_to_pdf(cover_letter, "cover_letter.pdf")
+    save_text_to_pdf(qa_guide, "qa_guide.pdf")
 
-# ---------------------- Run Everything ----------------------
+    subject = "Your Personalized Cover Letter & Interview Q&A Guide"
+    body = f"Hi {candidate_name},\n\nPlease find attached your auto-generated cover letter and interview Q&A guide.\n\nGood luck!"
+    attachments = ["cover_letter.pdf", "qa_guide.pdf"]
 
-cover_letter = """
-Dear Hiring Manager,
+    send_email_with_attachments(user_email, subject, body, attachments)
 
-I am writing to express my interest in the AI Developer position at your esteemed organization.
-With my experience in deep learning, NLP, and Python, I am confident I can contribute effectively...
-
-Sincerely,
-Chanti Babu Sambangi
-"""
-
-qa_pairs = {
-    "What makes you a good fit for this role?": "I have built multiple AI projects...",
-    "How do your skills match the JD?": "I am proficient in Python, PyTorch, and have done image classification...",
-}
-
-# Generate PDFs
-generate_cover_letter_pdf(cover_letter, "Cover_Letter.pdf")
-generate_qa_pdf(qa_pairs, "QA_Match.pdf")
-
-# Email Setup
-sender_email = "agenticai.cbs@gmail.com"
-# Gmail app password
-import os
-sender_password = os.getenv("EMAIL_APP_PASSWORD")  
-receiver_email = "chantibabusambangi@gmail.com"
-subject = "Agentic AI Report"
-body = "Please find the attached PDF report generated by the AI agent."
-
-# Attachments: cover letter, Q&A, and resume
-attachments = [
-    "Cover_Letter.pdf",
-    "QA_Match.pdf"
-]
-
-# Send the email
-send_email_with_attachments(sender_email, sender_password, receiver_email, subject, body, attachments)
+    print(f"[INFO] Email sent to {user_email} with attachments.")
