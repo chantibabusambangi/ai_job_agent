@@ -56,13 +56,13 @@ if st.button("🚀 Run AI Agent Pipeline"):
         st.info("Running Resume Skill Match → YouTube Suggestions → Email Agent...")
         resume_text = convert_to_text(uploaded_resume)
         jd_text = convert_to_text(uploaded_jd)
-
+                
         state = {
             "resume_text": resume_text,
             "jd_text": jd_text,
+            "job_skills": job_skills,  # ✅ add this line
             "user_email": user_email
         }
-
         try:
             output = graph.invoke(state)
             st.subheader("✅ Final Agent Output:")
