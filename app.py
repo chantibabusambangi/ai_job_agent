@@ -6,7 +6,33 @@ from email_agent import email_agent
 from youtube_utility import youtube_utility
 
 # Define graph state class
-class GraphState(dict): pass
+#class GraphState(dict): pass
+
+
+
+
+
+from langgraph.graph import StateGraph, END
+
+builder = StateGraph(dict)
+
+builder.add_node("resume_skill_match", resume_skill_match_agent)
+builder.add_node("youtube", youtube_utility)
+builder.add_node("email", email_agent)
+
+builder.set_entry_point("resume_skill_match")
+
+# Explicit edges showing how data flows
+builder.add_edge("resume_skill_match", "youtube")
+builder.add_edge("youtube", "email")
+builder.add_edge("email", END)
+
+graph = builder.compile()
+
+
+
+
+
 
 # Initialize LangGraph
 builder = StateGraph(GraphState)
@@ -39,8 +65,7 @@ def convert_to_text(uploaded_file):
         return PyPDFLoader(tmp_path).load()[0].page_content
     else:
         return uploaded_file.read().decode("utf-8")
-
-
+        
 if st.button("🚀 Run AI Agent Pipeline"):
     if not uploaded_resume or not uploaded_jd or not user_email:
         st.warning("Please upload both files and enter your email.")
@@ -58,6 +83,20 @@ if st.button("🚀 Run AI Agent Pipeline"):
         try:
             output = graph.invoke(state)
             st.subheader("✅ Final Agent Output:")
-            st.write(output.get("result", "No result returned."))
+            st.write(output.get("result", "No result returned."))  # ← Right after this
+        
+            # 🔽 Add this block here
+            if "score" in output:
+                st.metric("📊 Resume Match Score", f"{output['score']:.2f}%")
+        
+            if "missing_skills" in output:
+                st.markdown("🧠 **Missing Skills:**")
+                st.write(", ".join(output["missing_skills"]))
+        
+            if "youtube_links" in output:
+                st.markdown("🎥 **YouTube Suggestions:**")
+                for link in output["youtube_links"]:
+                    st.markdown(f"- [Watch Video]({link})")
+        
         except Exception as e:
             st.error(f"❌ Error: {e}")
