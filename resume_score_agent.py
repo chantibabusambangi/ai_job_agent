@@ -45,4 +45,5 @@ def score_resume_vs_jd(inputs: ResumeInput, config: RunnableConfig = None) -> Re
         "missing_skills": missing_skills,
         "reasoning": reasoning
     }
-
+from langchain_core.runnables import RunnableLambda
+resume_skill_match_agent = RunnableLambda(score_resume_vs_jd)
