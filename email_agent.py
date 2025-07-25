@@ -49,6 +49,7 @@ Job Description:
 {jd_text}
 
 Write a concise, professional, and personalized cover letter that aligns the candidate's skills with the job.
+dont give an unnessary text and words just give the coverletter.
 """
     return llm.invoke([HumanMessage(content=prompt)]).content
 
@@ -62,7 +63,7 @@ Given this Resume:
 And Job Description:
 {jd_text}
 
-Generate 10 likely interview questions along with model answers that the candidate can prepare.
+Generate 10-12 likely interview questions along with model answers that the candidate can prepare.
 """
     return llm.invoke([HumanMessage(content=prompt)]).content
 
