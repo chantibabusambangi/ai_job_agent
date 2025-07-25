@@ -82,6 +82,6 @@ if st.button("🚀 Run AI Agent Pipeline", disabled=button_disabled):
             st.markdown("🎥 **YouTube Suggestions:**")
             for link in output["youtube_links"]:
                 st.markdown(f"- [Watch Video]({link})")
-        
-        except Exception as e:
-            st.error(f"❌ Error: {e}")
+    
+    except Exception as e:
+        st.error(f"❌ Error: {e}")
