@@ -6,6 +6,7 @@ from resume_score_agent import resume_skill_match_agent
 from email_agent import email_agent
 from youtube_utility import youtube_utility
 
+
 # Define graph state class
 #class GraphState(dict): pass
 
@@ -37,7 +38,7 @@ user_email = st.text_input("📧 Enter your Email")
 
 # Convert file to text
 import tempfile
-from langchain.document_loaders import PyPDFLoader
+
 
 def convert_to_text(uploaded_file):
     if uploaded_file.name.endswith(".pdf"):
