@@ -15,7 +15,7 @@ headers = {
     "Content-Type": "application/json"
 }
 
-def suggest_youtube_channels(missing_skills):
+def youtube_utility(missing_skills):
     if not missing_skills or not isinstance(missing_skills, list):
         return "🎉 Congratulations! You have all the required skills for this job."
 
