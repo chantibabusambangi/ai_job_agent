@@ -13,7 +13,7 @@ import os
 
 chat_model = ChatGroq(
     model="llama3-70b-8192",  # or llama3-70b-8192
-    api_key=""
+    api_key=
 ) 
 
 #TOOLS
@@ -40,11 +40,11 @@ def compare_skills(resume_skills: List[str], jd_skills: List[str]) -> dict:
     return {"matched": matched, "missing": missing}
 
 @tool
-def score_match(matched: List[str], jd_skills: List[str]) -> int:          
+def score_match(matched: List[str], jd_skills: List[str]) -> int:
     """Score the match out of 100 based on JD skills"""
     if not jd_skills:
         return 0
-    return int(len(matched) / len(jd_skills) * 100) #make this semantic using embeddings
+    return int(len(matched) / len(jd_skills) * 100)
 
 
 
@@ -111,8 +111,8 @@ graph.add_edge("score", END)
 resume_match_agent = graph.compile()
 
 if __name__ == "__main__":
-    resume = "Experienced in Python, SQL, Deep Learning, Communication, Teamwork"
-    jd = "Looking for a data scientist with skills in Python, Pandas, Deep Learning, PyTorch, Communication"
+    resume = "Python, SQL, Deep Learning, Communication, Teamwork"
+    jd = "Python, Pandas, Deep Learning, PyTorch, Communication"
     result = resume_match_agent.invoke({
         "resume": resume,
         "jd": jd
