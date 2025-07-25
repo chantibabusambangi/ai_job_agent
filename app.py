@@ -3,7 +3,9 @@ from langgraph.graph import StateGraph, END
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 
 from resume_score_agent import resume_skill_match_agent
-from email_agent import email_agent
+from email_agent import email_agent_node as email_agent
+
+
 from youtube_utility import youtube_utility
 
 
