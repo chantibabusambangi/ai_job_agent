@@ -4,6 +4,7 @@
 langgraph
 langchain
 langchain-groq
+langchain-community
 
 # --- Embedding Models ---
 sentence-transformers
