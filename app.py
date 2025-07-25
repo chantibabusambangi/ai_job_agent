@@ -48,7 +48,6 @@ def convert_to_text(uploaded_file):
         return PyPDFLoader(tmp_path).load()[0].page_content
     else:
         return uploaded_file.read().decode("utf-8")
-        
 if st.button("🚀 Run AI Agent Pipeline"):
     if not uploaded_resume or not uploaded_jd or not user_email:
         st.warning("Please upload both files and enter your email.")
@@ -56,19 +55,22 @@ if st.button("🚀 Run AI Agent Pipeline"):
         st.info("Running Resume Skill Match → YouTube Suggestions → Email Agent...")
         resume_text = convert_to_text(uploaded_resume)
         jd_text = convert_to_text(uploaded_jd)
-                
+
+        from email_agent import extract_skills  # ✅ Add this import
+        job_skills = extract_skills(jd_text)    # ✅ Extract skills from JD
+
         state = {
             "resume_text": resume_text,
             "jd_text": jd_text,
-            "job_skills": job_skills,  # ✅ add this line
+            "job_skills": job_skills,
             "user_email": user_email
         }
+
         try:
             output = graph.invoke(state)
             st.subheader("✅ Final Agent Output:")
-            st.write(output.get("result", "No result returned."))  # ← Right after this
+            st.write(output.get("result", "No result returned."))  
         
-            # 🔽 Add this block here
             if "score" in output:
                 st.metric("📊 Resume Match Score", f"{output['score']:.2f}%")
         
