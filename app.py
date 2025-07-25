@@ -50,40 +50,38 @@ def convert_to_text(uploaded_file):
         return PyPDFLoader(tmp_path).load()[0].page_content
     else:
         return uploaded_file.read().decode("utf-8")
-if st.button("🚀 Run AI Agent Pipeline"):
-    if not uploaded_resume or not uploaded_jd or not user_email:
-        st.warning("Please upload both files and enter your email.")
-    else:
-        st.info("Running Resume Skill Match → YouTube Suggestions → Email Agent...")
-        resume_text = convert_to_text(uploaded_resume)
-        jd_text = convert_to_text(uploaded_jd)
+button_disabled = not (uploaded_resume and uploaded_jd and user_email)
+if st.button("🚀 Run AI Agent Pipeline", disabled=button_disabled):
+    st.info("Running Resume Skill Match → YouTube Suggestions → Email Agent...")
+    resume_text = convert_to_text(uploaded_resume)
+    jd_text = convert_to_text(uploaded_jd)
 
-        from email_agent import extract_skills  # ✅ Add this import
-        job_skills = extract_skills(jd_text)    # ✅ Extract skills from JD
+    from email_agent import extract_skills  # ✅ Add this import
+    job_skills = extract_skills(jd_text)    # ✅ Extract skills from JD
 
-        state = {
-            "resume_text": resume_text,
-            "jd_text": jd_text,
-            "job_skills": job_skills,
-            "user_email": user_email
-        }
+    state = {
+        "resume_text": resume_text,
+        "jd_text": jd_text,
+        "job_skills": job_skills,
+        "user_email": user_email
+    }
 
-        try:
-            output = graph.invoke(state)
-            st.subheader("✅ Final Agent Output:")
-            st.write(output.get("result", "No result returned."))  
-        
-            if "score" in output:
-                st.metric("📊 Resume Match Score", f"{output['score']:.2f}%")
-        
-            if "missing_skills" in output:
-                st.markdown("🧠 **Missing Skills:**")
-                st.write(", ".join(output["missing_skills"]))
-        
-            if "youtube_links" in output:
-                st.markdown("🎥 **YouTube Suggestions:**")
-                for link in output["youtube_links"]:
-                    st.markdown(f"- [Watch Video]({link})")
+    try:
+        output = graph.invoke(state)
+        st.subheader("✅ Final Agent Output:")
+        st.write(output.get("result", "No result returned."))  
+    
+        if "score" in output:
+            st.metric("📊 Resume Match Score", f"{output['score']:.2f}%")
+    
+        if "missing_skills" in output:
+            st.markdown("🧠 **Missing Skills:**")
+            st.write(", ".join(output["missing_skills"]))
+    
+        if "youtube_links" in output:
+            st.markdown("🎥 **YouTube Suggestions:**")
+            for link in output["youtube_links"]:
+                st.markdown(f"- [Watch Video]({link})")
         
         except Exception as e:
             st.error(f"❌ Error: {e}")
