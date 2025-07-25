@@ -30,21 +30,6 @@ builder.add_edge("email", END)
 graph = builder.compile()
 
 
-
-
-
-
-# Initialize LangGraph
-builder = StateGraph(GraphState)
-builder.add_node("resume_skill_match", resume_skill_match_agent)
-builder.add_node("youtube", youtube_utility)
-builder.add_node("email", email_agent)
-builder.set_entry_point("resume_skill_match")
-builder.add_edge("resume_skill_match", "youtube")
-builder.add_edge("youtube", "email")
-builder.add_edge("email", END)
-graph = builder.compile()
-
 # Streamlit UI
 st.set_page_config(page_title="AI Job Agent System", layout="centered")
 st.title("🚀 AI Job Agent System")
