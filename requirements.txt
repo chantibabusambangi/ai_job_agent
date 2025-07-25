@@ -5,7 +5,7 @@ langgraph
 langchain
 langchain-groq
 langchain-community
-re
+
 # --- Embedding Models ---
 sentence-transformers
 torch  # Required by sentence-transformers
