@@ -51,6 +51,9 @@ def generate_cover_letter(resume_text, jd_text):
         ---
 Instructions:
 - Start with the candidate’s name, city, phone number, and email at the top.
+- make sure to Render each section exactly as labeled (HEADER, RECIPIENT, BODY).
+- In BODY, break into 4 distinct paragraphs.
+- No extra commentary or headings—just the formatted letter.
 - Include today’s date.
 - Add “Hiring Manager” and company name ("OpenText").
 - Use 3–4 short paragraphs in a professional tone:
