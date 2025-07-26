@@ -40,30 +40,48 @@ def extract_skills(text):
 
 def generate_cover_letter(resume_text, jd_text):
     prompt = f"""
-You are a professional resume and cover letter expert. Based on the following:
-
-Resume:
-{resume_text}
-
-Job Description:
-{jd_text}
-
-Write a concise, professional, and personalized cover letter that aligns the candidate's skills with the job.
-dont give an unnessary text and words just give the coverletter.
-"""
+        You are an expert resume writer.
+        Generate a concise and formal **cover letter** for the candidate using the following inputs:
+        ---
+        **Resume:**
+        {resume}
+        ---
+        **Job Description:**
+        {jd}
+        ---
+Instructions:
+Instructions:
+- Start with the candidate’s name, city, phone number, and email at the top.
+- Include today’s date.
+- Add “Hiring Manager” and company name ("OpenText").
+- Use 3–4 short paragraphs in a professional tone:
+    1. Introduce the candidate and express interest
+    2. Highlight experience and align it with the job
+    3. Share enthusiasm and appreciation
+- Avoid unnecessary filler or generic phrases.
+- Return only the clean, formatted letter — no explanations or extra notes.
+        """
     return llm.invoke([HumanMessage(content=prompt)]).content
 
 def generate_qa_guide(resume_text, jd_text):
     prompt = f"""
-You are an expert technical recruiter.
-
-Given this Resume:
-{resume_text}
-
-And Job Description:
-{jd_text}
-
-Generate 10-12 likely interview questions along with model answers that the candidate can prepare.
+You are a technical recruiter and career coach.
+Based on the following resume and job description, generate a **list of 10-12 likely interview questions and answers**.
+---
+**Resume:**
+{resume}
+---
+**Job Description:**
+{jd}
+---
+Instructions:
+- Include a mix of technical, behavioral, and situational questions.
+- Start each pair with:
+  Q: [question]
+  A: [2–4 line model answer]
+- Format cleanly. No bullet points, headings, or extra commentary.
+- Make sure the answers reflect skills from the resume and job requirements.
+- Return only the Q&A list.
 """
     return llm.invoke([HumanMessage(content=prompt)]).content
 
