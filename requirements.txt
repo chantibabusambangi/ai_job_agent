@@ -5,7 +5,7 @@ langgraph
 langchain
 langchain-groq
 langchain-community
-nltk==3.8.1
+#nltk==3.8.1
 # --- Embedding Models ---
 sentence-transformers
 torch  # Required by sentence-transformers
