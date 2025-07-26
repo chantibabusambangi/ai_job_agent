@@ -8,7 +8,7 @@ from email_agent import email_agent_node as email_agent
 
 from youtube_utility import youtube_utility
 
-import nltk
+
 # Define graph state class
 #class GraphState(dict): pass
 
@@ -34,7 +34,7 @@ graph = builder.compile()
 st.set_page_config(page_title="AI Job Agent System", layout="centered")
 st.title("🚀 AI Job Agent System")
 
-uploaded_resume = st.file_uploader("📄 Upload Resume (PDF only)", type=["pdf"])
+uploaded_resume = st.file_uploader("📄 Upload Resume (PDF only ok)", type=["pdf"])
 uploaded_jd = st.file_uploader("📄 Upload Job Description (PDF or .txt)", type=["pdf", "txt"])
 user_email = st.text_input("📧 Enter your Email")
 
