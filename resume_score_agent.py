@@ -2,11 +2,11 @@ from sentence_transformers import SentenceTransformer, util
 from typing import TypedDict, List
 from langchain_core.runnables import RunnableConfig, RunnableLambda
 import torch
-import nltk
+
 from nltk.tokenize import sent_tokenize
 import re
 import nltk
-nltk.download('punkt')  # Add this line
+
 
 from nltk.tokenize import sent_tokenize
 
