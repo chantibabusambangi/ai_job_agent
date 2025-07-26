@@ -77,11 +77,11 @@ if st.button("🚀 Run AI Agent Pipeline", disabled=button_disabled):
         if "missing_skills" in output:
             st.markdown("🧠 **Missing Skills:**")
             st.write(", ".join(output["missing_skills"]))
-    
         if "youtube_links" in output:
             st.markdown("🎥 **YouTube Suggestions:**")
-            for link in output["youtube_links"]:
-                st.markdown(f"- [Watch Video]({link})")
-    
+            for suggestion in output["youtube_links"]:
+                # suggestion is already in Markdown "[Title](URL)" or plain text
+                st.markdown(f"- {suggestion}")
+
     except Exception as e:
         st.error(f"❌ Error: {e}")
