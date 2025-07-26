@@ -55,7 +55,7 @@ Instructions:
 - In BODY, break into 4 distinct paragraphs.
 - No extra commentary or headings—just the formatted letter.
 - Include today’s date.
-- Add “Hiring Manager” and company name ("OpenText").
+- Add “Hiring Manager” and company name.
 - Use 3–4 short paragraphs in a professional tone:
     1. Introduce the candidate and express interest
     2. Highlight experience and align it with the job
