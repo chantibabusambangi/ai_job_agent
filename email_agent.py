@@ -44,10 +44,10 @@ def generate_cover_letter(resume_text, jd_text):
         Generate a concise and formal **cover letter** for the candidate using the following inputs:
         ---
         **Resume:**
-        {resume}
+        {resume_text}
         ---
         **Job Description:**
-        {jd}
+        {jd_text}
         ---
 Instructions:
 Instructions:
@@ -69,10 +69,10 @@ You are a technical recruiter and career coach.
 Based on the following resume and job description, generate a **list of 10-12 likely interview questions and answers**.
 ---
 **Resume:**
-{resume}
+{resume_text}
 ---
 **Job Description:**
-{jd}
+{jd_text}
 ---
 Instructions:
 - Include a mix of technical, behavioral, and situational questions.
@@ -130,6 +130,10 @@ def send_email_with_attachments(to_email, subject, body, attachments):
 
 # ------------------------ Main Agent ------------------------
 
+def clean_text_for_pdf(text):
+    lines = text.strip().split('\n')
+    cleaned_lines = [line.strip() for line in lines if line.strip()]
+    return '\n'.join(cleaned_lines)
 
 def email_agent(resume_text, jd_text, user_email):
     candidate_name = extract_candidate_name(resume_text)
@@ -151,8 +155,13 @@ def email_agent(resume_text, jd_text, user_email):
     cl_file = f"cover_letter_{uuid.uuid4().hex[:6]}.pdf"
     qa_file = f"qa_guide_{uuid.uuid4().hex[:6]}.pdf"
 
-    save_text_to_pdf(cover_letter, cl_file)
-    save_text_to_pdf(qa_guide, qa_file)
+    
+    clean_cl = clean_text_for_pdf(cover_letter)
+    clean_qa = clean_text_for_pdf(qa_guide)
+    
+    save_text_to_pdf(clean_cl, cl_file)
+    save_text_to_pdf(clean_qa, qa_file)
+
 
     subject = "📄 Your Personalized Cover Letter & Interview Guide"
     body = f"Hi {candidate_name},\n\nAttached are your AI-generated cover letter and interview Q&A guide.\n\nGood luck with your application!\n\nRegards,\nAI Job Agent"
