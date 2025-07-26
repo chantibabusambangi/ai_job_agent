@@ -17,7 +17,7 @@ import streamlit as st  # Optional, for error display in Streamlit apps
 load_dotenv()
 
 # ✅ Initialize Groq LLM (agent-specific)
-llm = ChatGroq(api_key=os.getenv("GROQ_API_KEY"), model="deepseek-r1-distill-llama-70b")
+llm = ChatGroq(api_key=os.getenv("GROQ_API_KEY"), model="llama-3.1-8b-instant")
 
 # ------------------------ Extracting Info ------------------------
 
