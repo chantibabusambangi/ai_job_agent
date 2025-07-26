@@ -133,7 +133,6 @@ def clean_text_for_pdf(text):
     lines = text.strip().split('\n')
     cleaned_lines = [line.strip() for line in lines if line.strip()]
     return '\n'.join(cleaned_lines)
-
 def email_agent(resume_text, jd_text, user_email):
     candidate_name = extract_candidate_name(resume_text)
     candidate_skills = extract_skills(resume_text)
@@ -141,35 +140,34 @@ def email_agent(resume_text, jd_text, user_email):
     try:
         cover_letter = generate_cover_letter(resume_text, jd_text)
     except Exception as e:
-        st.error(f"[ERROR] Cover Letter Generation Failed: {e}")
+        print(f"[ERROR] Cover Letter Generation Failed: {e}")
         cover_letter = "Unable to generate cover letter at this time."
 
     try:
         qa_guide = generate_qa_guide(resume_text, jd_text)
     except Exception as e:
-        st.error(f"[ERROR] Q&A Generation Failed: {e}")
+        print(f"[ERROR] Q&A Generation Failed: {e}")
         qa_guide = "Unable to generate Q&A at this time."
 
-    # Use unique filenames to avoid collision
     cl_file = f"cover_letter_{uuid.uuid4().hex[:6]}.pdf"
     qa_file = f"qa_guide_{uuid.uuid4().hex[:6]}.pdf"
 
-    
     clean_cl = clean_text_for_pdf(cover_letter)
     clean_qa = clean_text_for_pdf(qa_guide)
-    
+
     save_text_to_pdf(clean_cl, cl_file)
     save_text_to_pdf(clean_qa, qa_file)
-
 
     subject = "📄 Your Personalized Cover Letter & Interview Guide"
     body = f"Hi {candidate_name},\n\nAttached are your AI-generated cover letter and interview Q&A guide.\n\nGood luck with your application!\n\nRegards,\nAI Job Agent"
 
     try:
         send_email_with_attachments(user_email, subject, body, [cl_file, qa_file])
-        st.success(f"✅ Email sent to {user_email} with the generated documents.")
+        print(f"[SUCCESS] Email sent to {user_email} with generated documents.")
     except Exception as e:
-        st.error(f"❌ Failed to send email: {e}")
+        print(f"[ERROR] Failed to send email: {e}")
+
+
 def email_agent_node(state):
     resume_text = state["resume_text"]
     jd_text = state["jd_text"]
