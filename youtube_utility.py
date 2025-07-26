@@ -48,14 +48,17 @@ def youtube_utility(state):
     
         youtube_links = []
         for line in lines:
-            match = re.search(r'(.+?)\s*-\s*(https?://[^\s]+)', line)
-            if match:
-                title = match.group(1).strip()
-                url = match.group(2).strip()
-                youtube_links.append(f"[{title}]({url})")
+            markdown_match = re.search(r'\[(.*?)\]\((https?://.*?)\)', line)
+            dash_match = re.search(r'(.+?)\s*-\s*(https?://[^\s]+)', line)
+            
+            if markdown_match:
+                youtube_links.append(f"[{markdown_match.group(1)}]({markdown_match.group(2)})")
+            elif dash_match:
+                youtube_links.append(f"[{dash_match.group(1)}]({dash_match.group(2)})")
             else:
                 youtube_links.append(line.strip())
-    
+        
+            
         return {
             **state,
             "youtube_links": youtube_links
