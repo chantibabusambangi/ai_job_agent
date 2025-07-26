@@ -5,6 +5,11 @@ import torch
 import nltk
 from nltk.tokenize import sent_tokenize
 import re
+import nltk
+nltk.download('punkt')  # Add this line
+
+from nltk.tokenize import sent_tokenize
+
 
 # Load model once
 model = SentenceTransformer('all-MiniLM-L6-v2')
