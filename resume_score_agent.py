@@ -3,13 +3,13 @@ from typing import TypedDict, List
 from langchain_core.runnables import RunnableConfig, RunnableLambda
 import torch
 
-from nltk.tokenize import sent_tokenize
+#import nltk
+#from nltk.tokenize import sent_tokenize
+#from nltk.tokenize import sent_tokenize
+
 import re
-import nltk
-
-
-from nltk.tokenize import sent_tokenize
-
+def simple_sent_tokenize(text: str) -> list[str]:
+    return re.split(r'(?<=[.!?])\s+', text.strip())
 
 # Load model once
 model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -50,9 +50,10 @@ def score_resume_vs_jd(inputs: ResumeInput, config: RunnableConfig = None) -> Re
 
     # Preprocess resume and JD
     jd_cleaned = jd.lower().replace("-", " ").replace("_", " ").strip()
+   
     resume_chunks = [
-        re.sub(r"[^\w\s]", "", chunk.lower().replace("-", " ").replace("_", " ").strip())
-        for chunk in sent_tokenize(resume)
+        re.sub(r"[^\w\s]", "", chunk.lower().strip())
+        for chunk in simple_sent_tokenize(resume) #used instead of sen_tokenize
     ]
 
     # Embeddings
