@@ -61,26 +61,32 @@ Instructions:
 - Return only the clean, formatted letter — no explanations or extra notes.
         """
     return llm.invoke([HumanMessage(content=prompt)]).content
-
 def generate_qa_guide(resume_text, jd_text):
     prompt = f"""
 You are a technical recruiter and career coach.
-Based on the following resume and job description, generate a **list of 10-12 likely interview questions and answers**.
+
+Step 1️⃣ Identify the top 3–4 technical domains or skill‑clusters mentioned in the resume or job description.
+
+Step 2️⃣ For each domain, write 2–3 focused Q&A pairs numbered sequentially.
+
+Step 3️⃣ Add behavioral or situational questions so that there are 10–12 questions total.
+
 ---
-**Resume:**
+**Resume Text:**
 {resume_text}
----
-**Job Description:**
+
+**Job Description Text:**
 {jd_text}
----
-Instructions:
-- Include a mix of technical, behavioral, and situational questions.
-- Start each pair with:
-  Q: [question]
-  A: [2–4 line model answer]
-- Format cleanly. No bullet points, headings, or extra commentary.
-- Make sure the answers reflect skills from the resume and job requirements.
-- Return only the Q&A list.
+
+**Instructions:**
+- Use this exact numbering format:
+  Q1: [first question]
+  A1: [first answer]
+  Q2: [second question]
+  A2: [second answer]
+  …and so on.
+- Ensure each answer is 2–4 lines and clearly tailored to the candidate’s experience.
+- Return only the numbered Q&A pairs, no extra headings or commentary.
 """
     return llm.invoke([HumanMessage(content=prompt)]).content
 
