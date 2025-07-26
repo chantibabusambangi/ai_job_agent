@@ -50,7 +50,6 @@ def generate_cover_letter(resume_text, jd_text):
         {jd_text}
         ---
 Instructions:
-Instructions:
 - Start with the candidate’s name, city, phone number, and email at the top.
 - Include today’s date.
 - Add “Hiring Manager” and company name ("OpenText").
