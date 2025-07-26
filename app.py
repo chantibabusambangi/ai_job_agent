@@ -8,7 +8,7 @@ from email_agent import email_agent_node as email_agent
 
 from youtube_utility import youtube_utility
 
-
+import nltk
 # Define graph state class
 #class GraphState(dict): pass
 
