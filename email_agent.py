@@ -84,17 +84,46 @@ Instructions:
 """
     return llm.invoke([HumanMessage(content=prompt)]).content
 
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.units import inch
+
 def save_text_to_pdf(text, filename):
-    c = canvas.Canvas(filename, pagesize=letter)
-    width, height = letter
-    y = height - 40
-    for line in text.split('\n'):
-        if y < 40:
-            c.showPage()
-            y = height - 40
-        c.drawString(40, y, line[:110])
-        y -= 14
-    c.save()
+    """
+    Writes `text` into a nicely formatted PDF at `filename`.
+    Uses ReportLab Platypus to auto-wrap paragraphs, handle page breaks, and set margins.
+    """
+    # Set up document with 1" margins
+    doc = SimpleDocTemplate(
+        filename,
+        pagesize=letter,
+        leftMargin=inch,
+        rightMargin=inch,
+        topMargin=inch,
+        bottomMargin=inch
+    )
+    
+    # Create a simple paragraph style
+    styles = getSampleStyleSheet()
+    body_style = ParagraphStyle(
+        'Body',
+        parent=styles['Normal'],
+        fontName='Times-Roman',
+        fontSize=12,
+        leading=16,         # line spacing
+        spaceAfter=12       # space after each paragraph
+    )
+    
+    # Split on double-newlines for paragraphs
+    story = []
+    for para in text.strip().split('\n\n'):
+        # Convert any single-line breaks into spaces
+        clean = ' '.join(line.strip() for line in para.splitlines())
+        story.append(Paragraph(clean, body_style))
+        story.append(Spacer(1, 0.2*inch))
+    
+    doc.build(story)
 
 # ------------------------ Email Utilities ------------------------
 
@@ -166,8 +195,6 @@ def email_agent(resume_text, jd_text, user_email):
         print(f"[SUCCESS] Email sent to {user_email} with generated documents.")
     except Exception as e:
         print(f"[ERROR] Failed to send email: {e}")
-
-
 def email_agent_node(state):
     resume_text = state["resume_text"]
     jd_text = state["jd_text"]
