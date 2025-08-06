@@ -96,7 +96,7 @@ uploaded_jd = st.file_uploader("📄 Upload Job Description (PDF or .txt)", type
 user_email = st.text_input("📧 Enter your Email")
 
 button_disabled = not (uploaded_resume and uploaded_jd and user_email)
-
+st.sidebar.markdown("🔹 **Built with ❤️ by chantibabusambangi@gmail.com**")
 if st.button("🚀 Run AI Agent Pipeline", disabled=button_disabled):
     st.info("Running agentic AI workflow...")
 
