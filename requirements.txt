@@ -1,3 +1,4 @@
+
 # LLM and LangGraph
 
 # --- Core LangGraph & LLMs ---
@@ -5,6 +6,7 @@ langgraph
 langchain
 langchain-groq
 langchain-community
+openai
 #nltk==3.8.1
 # --- Embedding Models ---
 sentence-transformers
