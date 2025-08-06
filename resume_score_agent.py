@@ -1,69 +1,94 @@
-import os
-from dotenv import load_dotenv
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
-from langchain_groq import ChatGroq
+from sentence_transformers import SentenceTransformer, util
+from typing import TypedDict, List
+from langchain_core.runnables import RunnableConfig, RunnableLambda
+import torch
 
-load_dotenv()
+#import nltk
+#from nltk.tokenize import sent_tokenize
+#from nltk.tokenize import sent_tokenize
 
-# Setup LLM
-llm = ChatGroq(
-    model="llama3-8b-8192",
-    temperature=0,
-    api_key=os.getenv("GROQ_API_KEY"),
-)
+import re
+def simple_sent_tokenize(text: str) -> list[str]:
+    return re.split(r'(?<=[.!?])\s+', text.strip())
 
-# Prompt Template
-prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are a resume evaluator. Be strict and professional."),
-    ("human", """
-You will be given a resume and a job description.
+# Load model once
+model = SentenceTransformer('all-MiniLM-L6-v2')
 
-Your job is to:
-1. Carefully compare the resume against the job description.
-2. Identify **missing or weakly present skills**.
-3. Provide a **score out of 100** based on the relevance of the resume to the JD.
+class ResumeInput(TypedDict):
+    resume_text: str
+    jd_text: str
+    job_skills: List[str]
 
-Return JSON like this:
-{
-  "score": 74,
-  "missing_skills": ["Time series forecasting", "PyTorch", "CI/CD"]
-}
+class ResumeOutput(ResumeInput):
+    score: float
+    missing_skills: List[str]
+    reasoning: str
 
-Be strict. If a skill is mentioned only vaguely, treat it as missing.
+def normalize_skill(skill: str) -> str:
+    return re.sub(r"[^\w\s]", "", skill.lower().replace("-", " ").replace("_", " ").strip())
 
-Resume:
----------
-{resume}
+def score_resume_vs_jd(inputs: ResumeInput, config: RunnableConfig = None) -> ResumeOutput:
+    resume = inputs["resume_text"]
+    jd = inputs["jd_text"]
+    job_skills = inputs["job_skills"]
 
-Job Description:
-----------------
-{jd}
-""")
-])
+    # Basic input validation
+    if not resume.strip() or not jd.strip():
+        return {
+            **inputs,
+            "score": 0.0,
+            "missing_skills": job_skills,
+            "reasoning": "Empty resume or JD provided."
+        }
+    if len(resume.strip().split()) < 20 or len(jd.strip().split()) < 20:
+        return {
+            **inputs,
+            "score": 0.0,
+            "missing_skills": job_skills,
+            "reasoning": "Resume or JD too short to analyze meaningfully."
+        }
 
-parser = JsonOutputParser()
+    # Preprocess resume and JD
+    jd_cleaned = jd.lower().replace("-", " ").replace("_", " ").strip()
+   
+    resume_chunks = [
+        
+        re.sub(r"[^\w\s]", "", chunk.lower().strip())
+        for chunk in simple_sent_tokenize(resume) #used instead of sen_tokenize
+    ]
 
-chain = prompt | llm | parser
+    # Embeddings
+    emb_resume = model.encode(resume, convert_to_tensor=True)
+    emb_jd = model.encode(jd_cleaned, convert_to_tensor=True)
+    emb_chunks = model.encode(resume_chunks, convert_to_tensor=True)
 
-def evaluate_resume(resume_text: str, jd_text: str) -> dict:
-    try:
-        result = chain.invoke({
-            "resume": resume_text,
-            "jd": jd_text
-        })
-        return result
-    except Exception as e:
-        print("❌ Error while scoring resume:", e)
-        return {"score": 0, "missing_skills": ["Error during evaluation"]}
+    # Compute similarity score
+    score = float(util.cos_sim(emb_resume, emb_jd).item() * 100)
 
-# Example usage
-if __name__ == "__main__":
-    resume = open("resume.txt", "r", encoding="utf-8").read()
-    jd = open("job_description.txt", "r", encoding="utf-8").read()
+    # Missing skills detection
+    normalized_job_skills = [normalize_skill(skill) for skill in job_skills]
+    skill_embeddings = model.encode(normalized_job_skills, convert_to_tensor=True)
 
-    print("🔍 Evaluating Resume...")
-    result = evaluate_resume(resume, jd)
-    
-    print("✅ Score:", result["score"])
-    print("❌ Missing Skills:", result["missing_skills"])
+    missing_skills = []
+    for i, skill_emb in enumerate(skill_embeddings):
+        sim_scores = util.cos_sim(skill_emb, emb_chunks)
+        if torch.max(sim_scores).item() < 0.55:
+            missing_skills.append(job_skills[i])
+
+    # Reasoning
+    if score > 75:
+        reasoning = "High similarity indicates good alignment with the JD."
+    elif score > 50:
+        reasoning = "Moderate alignment. Some key skills may be missing or weakly represented."
+    else:
+        reasoning = "Low alignment. Resume may not be a good fit for the JD."
+
+    return {
+        **inputs,
+        "score": round(score, 2),
+        "missing_skills": missing_skills,
+        "reasoning": reasoning
+    }
+
+# Agent wrapper
+resume_skill_match_agent = RunnableLambda(score_resume_vs_jd)
