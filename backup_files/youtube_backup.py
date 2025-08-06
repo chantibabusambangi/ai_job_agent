@@ -26,11 +26,8 @@ def youtube_utility(state):
     skills_str = ', '.join(missing_skills)
 
     prompt = (
-        f"You are an AI assistant! For each of the following skills, suggest 1 to 2 high-quality YouTube videos to learn them: "
-        f"{skills_str}. For each video, return:\n"
-        "- [Video Title](YouTube URL) - Channel: Channel Name\n\n"
-        "Use exact Markdown format. No extra explanation or notes. Example:\n"
-        "[Intro to SQL](https://youtube.com/abc123) - Channel: freeCodeCamp.org"
+        f"You are an AI assistant! For each of the following skills, suggest 1 to 2 high-quality YouTube videos or channels to learn them: "
+        f"{skills_str}. Only return the video/channel title and clickable YouTube link in Markdown format."
     )
 
     payload = {
