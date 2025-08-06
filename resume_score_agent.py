@@ -1,93 +1,69 @@
-import streamlit as st
-from crewai import Agent, Task, Crew, Process
+import os
+from dotenv import load_dotenv
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import JsonOutputParser
 from langchain_groq import ChatGroq
-from langchain.prompts import PromptTemplate
 
-# Initialize the Groq LLaMA3 model
-llm = ChatGroq(temperature=0.3, model_name="llama3-8b-8192")
+load_dotenv()
 
-# Streamlit UI
-st.set_page_config(page_title="Resume Score Agent", layout="centered")
-st.title("🧠 Resume Scoring Agent")
-st.markdown("Built by **ChantiBabuSambangi**")
+# Setup LLM
+llm = ChatGroq(
+    model="llama3-8b-8192",
+    temperature=0,
+    api_key=os.getenv("GROQ_API_KEY"),
+)
 
-jd_input = st.text_area("📄 Paste the Job Description (JD)", height=200)
-resume_input = st.text_area("🧾 Paste your Resume (text only)", height=300)
+# Prompt Template
+prompt = ChatPromptTemplate.from_messages([
+    ("system", "You are a resume evaluator. Be strict and professional."),
+    ("human", """
+You will be given a resume and a job description.
 
-if st.button("🔍 Evaluate Resume"):
-    if not jd_input or not resume_input:
-        st.warning("Please provide both the Job Description and Resume.")
-        st.stop()
+Your job is to:
+1. Carefully compare the resume against the job description.
+2. Identify **missing or weakly present skills**.
+3. Provide a **score out of 100** based on the relevance of the resume to the JD.
 
-    # Define the agent
-    resume_agent = Agent(
-        role="Resume Scoring Agent",
-        goal="Give a detailed resume score and list missing or weakly represented skills",
-        backstory=(
-            "You are an expert career assistant specializing in resume analysis. "
-            "Your job is to compare a candidate's resume with a job description and find skills or qualifications "
-            "that are either missing or weakly represented. You then generate a resume score and list those missing/weak skills."
-        ),
-        verbose=True,
-        llm=llm
-    )
+Return JSON like this:
+{
+  "score": 74,
+  "missing_skills": ["Time series forecasting", "PyTorch", "CI/CD"]
+}
 
-    # Define the task prompt template
-    prompt_template = PromptTemplate.from_template("""
-    Job Description:
-    {jd}
+Be strict. If a skill is mentioned only vaguely, treat it as missing.
 
-    Resume:
-    {resume}
+Resume:
+---------
+{resume}
 
-    You are to:
-    1. Extract all relevant skills, technologies, and qualifications mentioned in the Job Description.
-    2. Analyze the resume and identify:
-        - Strongly present skills ✅
-        - Weakly implied skills ⚠️
-        - Missing skills ❌
-    3. Return the following:
-        - Resume Score (0-100): based on skill overlap and match
-        - List of ❌ Missing skills
-        - List of ⚠️ Weakly represented skills
-        - Suggestion to improve the resume
+Job Description:
+----------------
+{jd}
+""")
+])
 
-    Format the response like:
+parser = JsonOutputParser()
 
-    --- Resume Score ---
-    Score: XX / 100
+chain = prompt | llm | parser
 
-    --- Missing Skills (❌) ---
-    - Skill A
-    - Skill B
-
-    --- Weakly Represented Skills (⚠️) ---
-    - Skill C
-    - Skill D
-
-    --- Suggestions ---
-    Add details or projects related to the missing or weakly represented skills.
-    """)
-
-    # Fill the task
-    task_prompt = prompt_template.format(jd=jd_input, resume=resume_input)
-
-    resume_task = Task(
-        description=task_prompt,
-        agent=resume_agent
-    )
-
-    # Run the crew
+def evaluate_resume(resume_text: str, jd_text: str) -> dict:
     try:
-        crew = Crew(
-            agents=[resume_agent],
-            tasks=[resume_task],
-            process=Process.sequential,
-            verbose=True
-        )
-        result = crew.run()
-        st.success("✅ Resume Evaluation Complete!")
-        st.markdown(result)
-
+        result = chain.invoke({
+            "resume": resume_text,
+            "jd": jd_text
+        })
+        return result
     except Exception as e:
-        st.error(f"❌ Error while running agentic workflow: {str(e)}")
+        print("❌ Error while scoring resume:", e)
+        return {"score": 0, "missing_skills": ["Error during evaluation"]}
+
+# Example usage
+if __name__ == "__main__":
+    resume = open("resume.txt", "r", encoding="utf-8").read()
+    jd = open("job_description.txt", "r", encoding="utf-8").read()
+
+    print("🔍 Evaluating Resume...")
+    result = evaluate_resume(resume, jd)
+    
+    print("✅ Score:", result["score"])
+    print("❌ Missing Skills:", result["missing_skills"])
