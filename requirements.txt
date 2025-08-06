@@ -33,8 +33,9 @@ pandas
 pydantic
 
 # --- Database Handling ---
-sqlalchemy
 spacy
+en_core_web_sm
+
 
 # PDF/Doc parsing (for resumes and JDs)
 unstructured
