@@ -1,4 +1,4 @@
-# resume_assistant
+#ai job agent
 
 ✅ Step 1: Upload Your Resume & Job Description
 Upload your resume (PDF or DOCX).
