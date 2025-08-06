@@ -1,9 +1,13 @@
+import spacy
 from sentence_transformers import SentenceTransformer, util
 from typing import TypedDict, List
 import torch
 import re
+from difflib import SequenceMatcher
 
-# Load model once
+# Load spaCy English model
+nlp = spacy.load("en_core_web_sm")
+# Load transformer model once
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
 class ResumeInput(TypedDict):
@@ -16,67 +20,103 @@ class ResumeOutput(ResumeInput):
     missing_skills: List[str]
     reasoning: str
 
-# Robust normalization
-def normalize_text(text: str) -> str:
-    text = text.lower()
-    text = text.replace("-", " ").replace("_", " ")
-    text = re.sub(r"[^\w\s]", "", text)
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
+# 1. Normalization and Lemmatization
+def normalize_and_lemmatize(text: str) -> str:
+    doc = nlp(text.lower().replace("-", " ").replace("_", " "))
+    return " ".join([token.lemma_ for token in doc if token.is_alpha])
 
-# Less aggressive chunking: only on newlines and bullets
+# 2. Gentle Chunking
 def chunk_resume(text: str) -> List[str]:
-    return [normalize_text(chunk) for chunk in re.split(r"[•\n]", text) if chunk.strip()]
+    raw_chunks = re.split(r"[•\n]", text)
+    return [normalize_and_lemmatize(chunk) for chunk in raw_chunks if chunk.strip()]
 
-# Whole-word skill check using regex
+# 3. Skill Synonyms Expansion
+SKILL_SYNONYMS = {
+    "machine learning": ["machine learning", "ml", "statistical learning", "predictive modeling"],
+    "nlp": ["nlp", "natural language processing", "text analytics"],
+    "sql": ["sql", "structured query language"],
+    "python": ["python"],
+    # Add more domain-specific synonyms as needed
+}
+
+def expand_skills(skills: List[str]) -> List[str]:
+    expanded = set()
+    for skill in skills:
+        key = skill.lower()
+        expanded.update(SKILL_SYNONYMS.get(key, [key]))
+    return list(expanded)
+
+# 4. Whole-Word Matching
 def skill_in_resume(skill: str, resume_text: str) -> bool:
-    pattern = r"\b{}\b".format(re.escape(skill))
-    return re.search(pattern, resume_text) is not None
+    return re.search(r"\b{}\b".format(re.escape(skill)), resume_text) is not None
+
+# 5. Fuzzy Multi-Word Matching
+def fuzzy_phrase_match(skill: str, text: str, threshold=0.8) -> bool:
+    return SequenceMatcher(None, skill, text).ratio() > threshold
+
+# 6. Extract Technical Skills Section for Focused Scanning
+def extract_skills_section(resume: str) -> List[str]:
+    match = re.search(r"technical skills.*?(?=\n[A-Z][^a-z])", resume, re.DOTALL | re.IGNORECASE)
+    if match:
+        section = match.group()
+        return [normalize_and_lemmatize(section)]
+    return []
 
 def score_resume_vs_jd(inputs: ResumeInput, config=None) -> ResumeOutput:
     resume = inputs["resume_text"]
     jd = inputs["jd_text"]
     job_skills = inputs["job_skills"]
 
-    # Validation
     if not resume.strip() or not jd.strip():
-        return { **inputs, "score": 0.0, "missing_skills": job_skills, "reasoning": "Empty resume or JD provided." }
+        return {**inputs, "score": 0.0, "missing_skills": job_skills, "reasoning": "Empty resume or JD provided."}
     if len(resume.split()) < 20 or len(jd.split()) < 20:
-        return { **inputs, "score": 0.0, "missing_skills": job_skills, "reasoning": "Resume or JD too short to analyze meaningfully." }
+        return {**inputs, "score": 0.0, "missing_skills": job_skills, "reasoning": "Resume or JD too short to analyze meaningfully."}
 
-    # Normalization
-    resume_normalized = normalize_text(resume)
-    jd_normalized = normalize_text(jd)
+    resume_norm = normalize_and_lemmatize(resume)
+    jd_norm = normalize_and_lemmatize(jd)
+
     chunks = chunk_resume(resume)
+    skills_sections = extract_skills_section(resume)
+    chunks.extend(skills_sections)
 
-    # Embeddings for semantic similarity
-    emb_resume = model.encode(resume_normalized, convert_to_tensor=True)
-    emb_jd = model.encode(jd_normalized, convert_to_tensor=True)
-    emb_chunks = model.encode(chunks, convert_to_tensor=True)
+    emb_resume = model.encode(resume_norm, convert_to_tensor=True)
+    emb_jd = model.encode(jd_norm, convert_to_tensor=True)
+    emb_chunks = model.encode(chunks, convert_to_tensor=True) if chunks else torch.empty((0, model.get_sentence_embedding_dimension()))
 
-    # Score between resume and JD
     score_val = float(util.cos_sim(emb_resume, emb_jd).item() * 100)
 
-    # Prepare for skills extraction
     missing = []
-    normalized_job_skills = [normalize_text(skill) for skill in job_skills]
-    skill_embeddings = model.encode(normalized_job_skills, convert_to_tensor=True)
+    normalized_job_skills = [normalize_and_lemmatize(skill) for skill in job_skills]
+    expanded_skills = expand_skills(normalized_job_skills)
+    expanded_skill_embeddings = model.encode(expanded_skills, convert_to_tensor=True)
 
-    # Check each skill
-    for idx, skill in enumerate(normalized_job_skills):
-        # 1. Whole-word lexical match on resume
-        if skill_in_resume(skill, resume_normalized):
-            continue
+    resume_comp = " ".join(chunks)
 
-        # 2. Semantic similarity vs. resume chunks
-        sim_chunk = util.cos_sim(skill_embeddings[idx], emb_chunks)
-        sim_resume = util.cos_sim(skill_embeddings[idx], emb_resume)
+    for idx, skill in enumerate(expanded_skills):
+        found = False
 
-        # If not found lexically and below threshold for both, mark as missing
-        if torch.max(sim_chunk).item() < 0.55 and sim_resume.item() < 0.55:
-            missing.append(job_skills[idx])  # append original form
+        if skill_in_resume(skill, resume_comp):
+            found = True
+        elif fuzzy_phrase_match(skill, resume_comp):
+            found = True
+        else:
+            emb_skill = expanded_skill_embeddings[idx]
+            sim_resume = util.cos_sim(emb_skill, emb_resume).item() if emb_resume is not None else 0
+            sim_chunks = torch.max(util.cos_sim(emb_skill, emb_chunks)).item() if emb_chunks.size(0) > 0 else 0
+            if sim_resume > 0.48 or sim_chunks > 0.48:
+                found = True
 
-    # Score interpretation
+        if not found:
+            original_skill_idx = None
+            for i, skill_orig in enumerate(normalized_job_skills):
+                if skill in SKILL_SYNONYMS.get(skill_orig, [skill_orig]):
+                    original_skill_idx = i
+                    break
+            if original_skill_idx is not None:
+                orig_skill_name = job_skills[original_skill_idx]
+                if orig_skill_name not in missing:
+                    missing.append(orig_skill_name)
+
     if score_val > 75:
         reasoning = "✅ High similarity — resume aligns well with the job description."
     elif score_val > 50:
@@ -91,5 +131,4 @@ def score_resume_vs_jd(inputs: ResumeInput, config=None) -> ResumeOutput:
         "reasoning": reasoning
     }
 
-# Usage (for Langchain or standalone)
-resume_skill_match_agent = score_resume_vs_jd
+# Usage: resume_skill_match_agent = score_resume_vs_jd
