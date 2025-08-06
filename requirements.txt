@@ -34,7 +34,7 @@ pydantic
 
 # --- Database Handling ---
 spacy
-en_core_web_sm
+
 
 
 # PDF/Doc parsing (for resumes and JDs)
