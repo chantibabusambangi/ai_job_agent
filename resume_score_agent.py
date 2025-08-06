@@ -1,81 +1,93 @@
-from crewai import Agent, Task, Crew
-from textwrap import dedent
-import os
+import streamlit as st
+from crewai import Agent, Task, Crew, Process
+from langchain_groq import ChatGroq
+from langchain.prompts import PromptTemplate
 
-# You can replace this with any source of required skills
-REQUIRED_SKILLS = [
-    "Python", "TensorFlow", "PyTorch", "Scikit-learn", "Deep Learning",
-    "Machine Learning", "NLP", "CNN", "Data Analysis", "NumPy", "pandas",
-    "Matplotlib", "Transformer", "LLM", "AutoEncoder", "PCA", "GAN", "OpenCV",
-    "FastAPI", "Docker", "SQL", "Git"
-]
+# Initialize the Groq LLaMA3 model
+llm = ChatGroq(temperature=0.3, model_name="llama3-8b-8192")
 
-def resume_score_agent(resume_text):
-    from langchain.llms import Groq
-    from langchain.prompts import PromptTemplate
-    from langchain.chains import LLMChain
+# Streamlit UI
+st.set_page_config(page_title="Resume Score Agent", layout="centered")
+st.title("🧠 Resume Scoring Agent")
+st.markdown("Built by **ChantiBabuSambangi**")
 
-    llm = Groq(temperature=0.3, model_name="llama3-8b-8192")
+jd_input = st.text_area("📄 Paste the Job Description (JD)", height=200)
+resume_input = st.text_area("🧾 Paste your Resume (text only)", height=300)
 
-    # Prompt to extract skills and compare
-    prompt = PromptTemplate(
-        input_variables=["resume_text", "required_skills"],
-        template=dedent("""
-        You are an expert resume evaluator.
+if st.button("🔍 Evaluate Resume"):
+    if not jd_input or not resume_input:
+        st.warning("Please provide both the Job Description and Resume.")
+        st.stop()
 
-        Below is a resume:
-        -----------------
-        {resume_text}
-        -----------------
-
-        The required skills for the role are:
-        {required_skills}
-
-        Your job is to:
-        1. Extract all clearly and weakly mentioned skills from the resume.
-        2. Compare them with the required skills.
-        3. Return:
-            - A list of missing skills (include even if mentioned weakly).
-            - A resume score out of 10 based on relevance to required skills.
-
-        Respond in the following JSON format:
-
-        {{
-            "extracted_skills": [...],
-            "missing_skills": [...],
-            "resume_score": x
-        }}
-        """)
+    # Define the agent
+    resume_agent = Agent(
+        role="Resume Scoring Agent",
+        goal="Give a detailed resume score and list missing or weakly represented skills",
+        backstory=(
+            "You are an expert career assistant specializing in resume analysis. "
+            "Your job is to compare a candidate's resume with a job description and find skills or qualifications "
+            "that are either missing or weakly represented. You then generate a resume score and list those missing/weak skills."
+        ),
+        verbose=True,
+        llm=llm
     )
 
-    chain = LLMChain(llm=llm, prompt=prompt)
+    # Define the task prompt template
+    prompt_template = PromptTemplate.from_template("""
+    Job Description:
+    {jd}
 
-    result = chain.run({
-        "resume_text": resume_text,
-        "required_skills": ", ".join(REQUIRED_SKILLS)
-    })
+    Resume:
+    {resume}
 
-    # Try to extract dictionary safely
-    import json
+    You are to:
+    1. Extract all relevant skills, technologies, and qualifications mentioned in the Job Description.
+    2. Analyze the resume and identify:
+        - Strongly present skills ✅
+        - Weakly implied skills ⚠️
+        - Missing skills ❌
+    3. Return the following:
+        - Resume Score (0-100): based on skill overlap and match
+        - List of ❌ Missing skills
+        - List of ⚠️ Weakly represented skills
+        - Suggestion to improve the resume
+
+    Format the response like:
+
+    --- Resume Score ---
+    Score: XX / 100
+
+    --- Missing Skills (❌) ---
+    - Skill A
+    - Skill B
+
+    --- Weakly Represented Skills (⚠️) ---
+    - Skill C
+    - Skill D
+
+    --- Suggestions ---
+    Add details or projects related to the missing or weakly represented skills.
+    """)
+
+    # Fill the task
+    task_prompt = prompt_template.format(jd=jd_input, resume=resume_input)
+
+    resume_task = Task(
+        description=task_prompt,
+        agent=resume_agent
+    )
+
+    # Run the crew
     try:
-        json_result = json.loads(result)
-        return {
-            "extracted_skills": json_result.get("extracted_skills", []),
-            "missing_skills": json_result.get("missing_skills", []),
-            "resume_score": json_result.get("resume_score", 0)
-        }
-    except json.JSONDecodeError:
-        # fallback: handle malformed LLM response
-        return {
-            "extracted_skills": [],
-            "missing_skills": REQUIRED_SKILLS,
-            "resume_score": 0
-        }
-from resume_score_agent import resume_score_agent
+        crew = Crew(
+            agents=[resume_agent],
+            tasks=[resume_task],
+            process=Process.sequential,
+            verbose=True
+        )
+        result = crew.run()
+        st.success("✅ Resume Evaluation Complete!")
+        st.markdown(result)
 
-resume_text = your_resume_text_input
-result = resume_score_agent(resume_text)
-
-st.write("✅ Extracted Skills:", result["extracted_skills"])
-st.write("❌ Missing Skills:", result["missing_skills"])
-st.write("📊 Resume Score:", result["resume_score"], "/10")
+    except Exception as e:
+        st.error(f"❌ Error while running agentic workflow: {str(e)}")
