@@ -1,79 +1,98 @@
 import os
-import re
-import openai  # or groq if using their client
-import streamlit as st
-from typing import List
-from dotenv import load_dotenv
+import json
+from groq import Groq
+from typing import List, Tuple
 
-load_dotenv()
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+# Initialize the Groq client
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))  # Make sure to set this in your env or .streamlit/secrets.toml
 
-# Set up LLaMA3 with Groq
-openai.api_key = GROQ_API_KEY
-openai.api_base = "https://api.groq.com/openai/v1"  # Groq endpoint
+def extract_skills_from_resume(resume_text: str) -> List[str]:
+    """Use LLM to extract all relevant skills, even weakly mentioned, from resume."""
+    prompt = f"""
+You are an expert resume parser.
 
-llm_model = "llama3-8b-8192"
+Extract a list of all technical and soft skills (both strong and weak mentions) from the following resume text.
 
-def call_llm(prompt: str) -> str:
-    response = openai.ChatCompletion.create(
-        model=llm_model,
+Resume Text:
+\"\"\"
+{resume_text}
+\"\"\"
+
+Return the result as a Python list of strings.
+"""
+
+    response = client.chat.completions.create(
+        model="llama3-8b-8192",
         messages=[
-            {"role": "system", "content": "You are a helpful AI assistant that analyzes resumes."},
             {"role": "user", "content": prompt}
         ],
         temperature=0.2,
-        max_tokens=1024,
+        max_tokens=512,
     )
-    return response['choices'][0]['message']['content'].strip()
 
-def extract_resume_skills(resume_text: str, skill_list: List[str]) -> dict:
-    skills_str = ", ".join(skill_list)
-
-    prompt = f"""
-    You are given a resume and a list of target skills.
-
-    TASK:
-    - Identify which skills are clearly or weakly present in the resume.
-    - Return two comma-separated lists:
-      1. `present_skills`: skills that are either clearly or weakly present.
-      2. `missing_skills`: skills that are missing or not found at all.
-    - Include weak mentions (e.g. in projects or education) in present_skills.
-    - Only return the response in this JSON format:
-      {{
-        "present_skills": [...],
-        "missing_skills": [...]
-      }}
-
-    Resume:
-    {resume_text}
-
-    Skills to match:
-    [{skills_str}]
-    """
-
+    # Try to parse the returned content safely
+    content = response.choices[0].message.content.strip()
     try:
-        llm_output = call_llm(prompt)
-        parsed = eval(llm_output) if llm_output.startswith("{") else {}
-        return {
-            "present_skills": parsed.get("present_skills", []),
-            "missing_skills": parsed.get("missing_skills", [])
-        }
-    except Exception as e:
-        st.error(f"Error parsing LLM response: {e}")
-        return {
-            "present_skills": [],
-            "missing_skills": skill_list
-        }
+        skills = eval(content)
+        if isinstance(skills, list):
+            return [skill.lower().strip() for skill in skills]
+    except:
+        pass
+    return []
 
-def score_resume(present_skills: List[str], total_skills: List[str]) -> float:
-    if not total_skills:
-        return 0.0
-    score = (len(present_skills) / len(total_skills)) * 100
-    return round(score, 2)
+def extract_required_skills_from_job(job_description: str) -> List[str]:
+    """Extract required skills from job description using LLM."""
+    prompt = f"""
+You are an expert job analyst.
 
-# This can be used in Streamlit like:
-# result = extract_resume_skills(resume_text, skill_list)
-# score = score_resume(result["present_skills"], skill_list)
+From the following job description, extract all the required skills and technologies.
 
+Job Description:
+\"\"\"
+{job_description}
+\"\"\"
 
+Return the result as a Python list of strings.
+"""
 
+    response = client.chat.completions.create(
+        model="llama3-8b-8192",
+        messages=[
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.2,
+        max_tokens=512,
+    )
+
+    content = response.choices[0].message.content.strip()
+    try:
+        skills = eval(content)
+        if isinstance(skills, list):
+            return [skill.lower().strip() for skill in skills]
+    except:
+        pass
+    return []
+
+def score_resume(resume_skills: List[str], required_skills: List[str]) -> Tuple[int, List[str]]:
+    """Calculate resume score and missing skills."""
+    resume_set = set(resume_skills)
+    required_set = set(required_skills)
+
+    matched_skills = resume_set.intersection(required_set)
+    missing_skills = [skill for skill in required_skills if skill not in matched_skills]
+
+    score = int((len(matched_skills) / max(len(required_skills), 1)) * 100)
+    return score, missing_skills
+
+def analyze_resume(resume_text: str, job_description: str) -> dict:
+    """Main function to analyze resume against job description."""
+    resume_skills = extract_skills_from_resume(resume_text)
+    required_skills = extract_required_skills_from_job(job_description)
+    score, missing_skills = score_resume(resume_skills, required_skills)
+
+    return {
+        "resume_score": score,
+        "matched_skills": list(set(resume_skills).intersection(set(required_skills))),
+        "missing_skills": missing_skills,
+        "built_by": "Chantibabusambangi"
+    }
