@@ -33,7 +33,7 @@ pandas
 pydantic
 
 # --- Database Handling ---
-spacy
+
 
 
 
