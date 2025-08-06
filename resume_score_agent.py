@@ -21,6 +21,7 @@ def score_resume_vs_jd_llm(inputs: ResumeInput, config=None) -> ResumeOutput:
     """
     Uses Groq LLM (llama3-8b-8192) to compare resume and JD,
     detect missing skills, and provide a similarity score + explanation.
+    This version has stronger prompt logic to reduce false negatives.
     """
 
     resume = inputs["resume_text"].strip()
@@ -33,22 +34,30 @@ def score_resume_vs_jd_llm(inputs: ResumeInput, config=None) -> ResumeOutput:
     if len(resume.split()) < 20 or len(jd.split()) < 20:
         return {**inputs, "score": 0.0, "missing_skills": job_skills, "reasoning": "Resume or JD too short to analyze meaningfully."}
 
-    # Prepare the prompt for LLM with clear instructions
+    # Strong prompt to explicitly require ALL missing skills listed
     prompt = f"""
-You are a highly skilled recruiter assistant AI.
+You are a precise and strict recruitment assistant AI.
 
-You receive a candidate's resume text, a job description, and a list of key job skills required.
+Given a candidate's resume text, a job description, and a list of key job skills required, your task is:
 
-Task:
-1. Analyze the resume and job description.
-2. For each skill in the job skills list, determine if the candidate has that skill sufficiently.
-3. Return a JSON object with these fields:
-    - "score": a float percentage score (0-100) showing overall resume match to the JD.
-    - "missing_skills": a list of skills NOT clearly demonstrated in the resume.
-    - "reasoning": a concise explanation of the assessment.
+1. Analyze carefully if each skill in the job skills list is present in the resume with sufficient evidence.
+2. List ALL missing or insufficient skills explicitly, even if partially missing or implied weakly.
+3. Provide an overall resume match score between 0 and 100 percent.
+4. Give a concise, clear reasoning explaining which skills are missing and why.
 
-Inputs:
----
+Please RESPOND ONLY with a valid JSON EXACTLY matching this format (no extra text or explanations):
+
+{{
+    "score": float,          // 0.0 - 100.0, overall fit percentage
+    "missing_skills": [      // list of missing or insufficient skills (as given in job skills list)
+        "skill1",
+        "skill2"
+    ],
+    "reasoning": string      // concise explanation of assessment
+}}
+
+Use the following INPUTS:
+
 Resume:
 {resume}
 
@@ -58,41 +67,62 @@ Job Description:
 Job Skills:
 {job_skills}
 
-Please respond ONLY with the JSON object, no other text.
+Reminders:
+- If all skills are present, missing_skills must be an empty list [].
+- Do NOT omit or skip any skills if they are missing or weak.
+- Do NOT add skills not in the provided list.
+- Be concise and factual.
 """
 
-    # Call LLM - you can adjust max_tokens, temperature, etc. if needed
+    # Call LLM - you may tune parameters if supported
     response = llm.invoke([HumanMessage(content=prompt)])
     llm_output = response.content.strip()
 
-    # Attempt to parse JSON from LLM response
+    # For debugging: uncomment to see raw output
+    # print("LLM raw output:", llm_output)
+
+    # Attempt to parse JSON from LLM response robustly
     try:
         parsed = json.loads(llm_output)
     except json.JSONDecodeError:
-        # If parsing fails, return fallback with info
-        return {
-            **inputs,
-            "score": 0.0,
-            "missing_skills": job_skills,
-            "reasoning": f"Failed to parse LLM output JSON. Raw output: {llm_output[:300]}..."
-        }
+        # Sometimes LLM may produce non-JSON output; try to find JSON substring or fallback
+        import re
+        json_match = re.search(r"\{.*\}", llm_output, flags=re.DOTALL)
+        if json_match:
+            try:
+                parsed = json.loads(json_match.group())
+            except Exception:
+                parsed = None
+        else:
+            parsed = None
+        if not parsed:
+            return {
+                **inputs,
+                "score": 0.0,
+                "missing_skills": job_skills,
+                "reasoning": f"Failed to parse LLM output JSON. Raw output begins with: {llm_output[:300]}..."
+            }
 
-    # Validate keys and types in parsed output
-    score = parsed.get("score", 0.0)
-    missing_skills = parsed.get("missing_skills", job_skills if score <= 15 else [])
+    # Validate parsed data and fallback defaults
+    score = parsed.get("score")
+    missing_skills = parsed.get("missing_skills")
     reasoning = parsed.get("reasoning", "")
 
-    # Defensive data cleanup
+    if not isinstance(score, (int, float)) or not (0 <= score <= 100):
+        score = 0.0  # fallback
+
     if not isinstance(missing_skills, list):
-        missing_skills = job_skills if score <= 15 else []
+        missing_skills = job_skills  # pessimistic fallback
 
-    if not isinstance(score, (int, float)) or score < 0 or score > 100:
-        score = 0.0
+    # Ensure missing_skills only contains skills from job_skills list (normalize casing)
+    valid_skills_set = set(map(str.lower, job_skills))
+    filtered_missing_skills = []
+    for skill in missing_skills:
+        if isinstance(skill, str) and skill.lower() in valid_skills_set:
+            filtered_missing_skills.append(skill)
+    missing_skills = filtered_missing_skills if filtered_missing_skills else []
 
-    if not isinstance(reasoning, str):
-        reasoning = ""
-
-    # Return the output dictionary consistent with ResumeOutput
+    # Return structured output
     return {
         **inputs,
         "score": round(float(score), 2),
@@ -102,4 +132,3 @@ Please respond ONLY with the JSON object, no other text.
 
 # Usage for Langchain or standalone
 resume_skill_match_agent = score_resume_vs_jd_llm
-
