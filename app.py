@@ -33,7 +33,7 @@ graph = builder.compile()
 # Streamlit UI
 st.set_page_config(page_title="AI Job Agent System", layout="centered")
 st.title("🚀 AI Job Agent System")
-
+st.sidebar.markdown("🔹 **Built with ❤️ by chantibabusambangi@gmail.com**")
 uploaded_resume = st.file_uploader("📄 Upload Resume (PDF only)", type=["pdf"])
 uploaded_jd = st.file_uploader("📄 Upload Job Description (PDF or .txt)", type=["pdf", "txt"])
 user_email = st.text_input("📧 Enter your Email")
