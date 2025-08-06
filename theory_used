@@ -1,4 +1,5 @@
-#before a false positive was came like even the skills are there in resume, agent gave some of them as missing skilsls
+#Why Skills Are Marked as Missing, even if they are in resume
+a false positive was came like even the skills are there in resume, agent gave some of them as missing skilsls
 🔍 Problem Summary
 You're using sentence embeddings to compare each job skill to chunks (sentences) from the resume. If the maximum cosine similarity of a skill to any sentence in the resume is below 0.55, the skill is marked as missing.
 
