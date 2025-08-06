@@ -1,111 +1,55 @@
-from sentence_transformers import SentenceTransformer, util
-from typing import TypedDict, List
-from langchain_core.runnables import RunnableConfig, RunnableLambda
-import torch
-import re
+import os
+from groq import Groq
+from dotenv import load_dotenv
 
-# Load model once
-model = SentenceTransformer('all-MiniLM-L6-v2')
+# Load API key from .env
+load_dotenv()
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-class ResumeInput(TypedDict):
-    resume_text: str
-    jd_text: str
-    job_skills: List[str]
+llm = Groq(api_key=GROQ_API_KEY)
 
-class ResumeOutput(ResumeInput):
-    score: float
-    missing_skills: List[str]
-    reasoning: str
+def query_llm(prompt: str) -> str:
+    response = llm.chat.completions.create(
+        model="llama3-8b-8192",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.2,
+        max_tokens=1024
+    )
+    return response.choices[0].message.content.strip()
 
-# ✅ Improved chunking
-def smart_chunk_resume(text: str) -> List[str]:
-    chunks = re.split(r'[•\n,;:.]', text)  # Bullet, newline, comma, colon, etc.
-    return [chunk.strip().lower() for chunk in chunks if chunk.strip()]
+def get_resume_score_and_missing_skills(resume_text: str, job_description: str):
+    prompt = f"""
+You are a professional career assistant helping candidates improve their resumes.
 
-# ✅ Optional: Extract 'Technical Skills' block
-def extract_technical_skills(resume: str) -> List[str]:
-    match = re.search(r"(?i)technical\s+skills.*?(?=\n[A-Z][^a-z])", resume, re.DOTALL)
-    if match:
-        return re.split(r"[:,\n•]", match.group())
-    return []
+Compare the following RESUME and JOB DESCRIPTION.
 
-# ✅ Normalize skills
-def normalize_skill(skill: str) -> str:
-    return re.sub(r"[^\w\s]", "", skill.lower().replace("-", " ").replace("_", " ").strip())
+1. Score the resume out of 100 based on:
+   - Skill match
+   - Relevance
+   - Clarity
+   - Technical depth
 
-# ✅ Main function
-def score_resume_vs_jd(inputs: ResumeInput, config: RunnableConfig = None) -> ResumeOutput:
-    resume = inputs["resume_text"]
-    jd = inputs["jd_text"]
-    job_skills = inputs["job_skills"]
+2. Identify **missing or weakly represented skills** required in the job description but not well covered in the resume. Be strict – if a skill is only briefly mentioned, still list it.
 
-    if not resume.strip() or not jd.strip():
-        return {
-            **inputs,
-            "score": 0.0,
-            "missing_skills": job_skills,
-            "reasoning": "Empty resume or JD provided."
-        }
-    if len(resume.strip().split()) < 20 or len(jd.strip().split()) < 20:
-        return {
-            **inputs,
-            "score": 0.0,
-            "missing_skills": job_skills,
-            "reasoning": "Resume or JD too short to analyze meaningfully."
-        }
+3. Return your response in the following format:
 
-    jd_cleaned = jd.lower().replace("-", " ").replace("_", " ").strip()
+Resume Score: <score>/100
 
-    # ✅ Combine chunking + optional skill section
-    resume_chunks = smart_chunk_resume(resume)
-    tech_skill_chunks = extract_technical_skills(resume)
-    combined_chunks = resume_chunks + tech_skill_chunks
+Missing Skills:
+- <Skill 1>
+- <Skill 2>
+...
 
-    cleaned_chunks = [
-        re.sub(r"[^\w\s]", "", chunk.strip())
-        for chunk in combined_chunks
-        if chunk.strip()
-    ]
+--- RESUME START ---
+{resume_text}
+--- RESUME END ---
 
-    # Embeddings
-    emb_resume = model.encode(resume, convert_to_tensor=True)
-    emb_jd = model.encode(jd_cleaned, convert_to_tensor=True)
-    emb_chunks = model.encode(cleaned_chunks, convert_to_tensor=True)
-
-    # Cosine similarity
-    score = float(util.cos_sim(emb_resume, emb_jd).item() * 100)
-
-    # Missing skills check
-    normalized_job_skills = [normalize_skill(skill) for skill in job_skills]
-    skill_embeddings = model.encode(normalized_job_skills, convert_to_tensor=True)
-
-    resume_text_lower = resume.lower()
-    missing_skills = []
-
-    for i, skill_emb in enumerate(skill_embeddings):
-        skill_name = normalized_job_skills[i]
-
-        if skill_name in resume_text_lower:
-            continue  # Skill found directly
-
-        sim_scores = util.cos_sim(skill_emb, emb_chunks)
-        if torch.max(sim_scores).item() < 0.55:
-            missing_skills.append(job_skills[i])
-
-    # Score interpretation
-    if score > 75:
-        reasoning = "✅ High similarity — resume aligns well with the job description."
-    elif score > 50:
-        reasoning = "⚠️ Moderate similarity — resume partially aligns, but some important skills may be missing."
-    else:
-        reasoning = "❌ Low similarity — resume lacks significant alignment with the JD."
-
-    return {
-        **inputs,
-        "score": round(score, 2),
-        "missing_skills": missing_skills,
-        "reasoning": reasoning
-    }
-
-# Agent wrapper
-resume_skill_match_agent = RunnableLambda(score_resume_vs_jd)
+--- JOB DESCRIPTION START ---
+{job_description}
+--- JOB DESCRIPTION END ---
+"""
+    try:
+        response = query_llm(prompt)
+        return response
+    except Exception as e:
+        return f"Error occurred: {e}"
