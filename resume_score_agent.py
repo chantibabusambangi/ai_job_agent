@@ -93,9 +93,9 @@ def score_resume_vs_jd(inputs: ResumeInput, config: RunnableConfig = None) -> Re
             missing_skills.append(job_skills[i])
 
     # Score interpretation
-    if score > 75:
+    if score > 50:
         reasoning = "✅ High similarity — resume aligns well with the job description."
-    elif score > 50:
+    elif score > 35:
         reasoning = "⚠️ Moderate similarity — resume partially aligns, but some important skills may be missing."
     else:
         reasoning = "❌ Low similarity — resume lacks significant alignment with the JD."
