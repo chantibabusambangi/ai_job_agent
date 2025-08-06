@@ -1,98 +1,95 @@
-import os
-import json
-from groq import Groq
-from typing import List, Tuple
+from sentence_transformers import SentenceTransformer, util
+from typing import TypedDict, List
+import torch
+import re
 
-# Initialize the Groq client
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))  # Make sure to set this in your env or .streamlit/secrets.toml
+# Load model once
+model = SentenceTransformer('all-MiniLM-L6-v2')
 
-def extract_skills_from_resume(resume_text: str) -> List[str]:
-    """Use LLM to extract all relevant skills, even weakly mentioned, from resume."""
-    prompt = f"""
-You are an expert resume parser.
+class ResumeInput(TypedDict):
+    resume_text: str
+    jd_text: str
+    job_skills: List[str]
 
-Extract a list of all technical and soft skills (both strong and weak mentions) from the following resume text.
+class ResumeOutput(ResumeInput):
+    score: float
+    missing_skills: List[str]
+    reasoning: str
 
-Resume Text:
-\"\"\"
-{resume_text}
-\"\"\"
+# Robust normalization
+def normalize_text(text: str) -> str:
+    text = text.lower()
+    text = text.replace("-", " ").replace("_", " ")
+    text = re.sub(r"[^\w\s]", "", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
 
-Return the result as a Python list of strings.
-"""
+# Less aggressive chunking: only on newlines and bullets
+def chunk_resume(text: str) -> List[str]:
+    return [normalize_text(chunk) for chunk in re.split(r"[•\n]", text) if chunk.strip()]
 
-    response = client.chat.completions.create(
-        model="llama3-8b-8192",
-        messages=[
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.2,
-        max_tokens=512,
-    )
+# Whole-word skill check using regex
+def skill_in_resume(skill: str, resume_text: str) -> bool:
+    pattern = r"\b{}\b".format(re.escape(skill))
+    return re.search(pattern, resume_text) is not None
 
-    # Try to parse the returned content safely
-    content = response.choices[0].message.content.strip()
-    try:
-        skills = eval(content)
-        if isinstance(skills, list):
-            return [skill.lower().strip() for skill in skills]
-    except:
-        pass
-    return []
+def score_resume_vs_jd(inputs: ResumeInput, config=None) -> ResumeOutput:
+    resume = inputs["resume_text"]
+    jd = inputs["jd_text"]
+    job_skills = inputs["job_skills"]
 
-def extract_required_skills_from_job(job_description: str) -> List[str]:
-    """Extract required skills from job description using LLM."""
-    prompt = f"""
-You are an expert job analyst.
+    # Validation
+    if not resume.strip() or not jd.strip():
+        return { **inputs, "score": 0.0, "missing_skills": job_skills, "reasoning": "Empty resume or JD provided." }
+    if len(resume.split()) < 20 or len(jd.split()) < 20:
+        return { **inputs, "score": 0.0, "missing_skills": job_skills, "reasoning": "Resume or JD too short to analyze meaningfully." }
 
-From the following job description, extract all the required skills and technologies.
+    # Normalization
+    resume_normalized = normalize_text(resume)
+    jd_normalized = normalize_text(jd)
+    chunks = chunk_resume(resume)
 
-Job Description:
-\"\"\"
-{job_description}
-\"\"\"
+    # Embeddings for semantic similarity
+    emb_resume = model.encode(resume_normalized, convert_to_tensor=True)
+    emb_jd = model.encode(jd_normalized, convert_to_tensor=True)
+    emb_chunks = model.encode(chunks, convert_to_tensor=True)
 
-Return the result as a Python list of strings.
-"""
+    # Score between resume and JD
+    score_val = float(util.cos_sim(emb_resume, emb_jd).item() * 100)
 
-    response = client.chat.completions.create(
-        model="llama3-8b-8192",
-        messages=[
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.2,
-        max_tokens=512,
-    )
+    # Prepare for skills extraction
+    missing = []
+    normalized_job_skills = [normalize_text(skill) for skill in job_skills]
+    skill_embeddings = model.encode(normalized_job_skills, convert_to_tensor=True)
 
-    content = response.choices[0].message.content.strip()
-    try:
-        skills = eval(content)
-        if isinstance(skills, list):
-            return [skill.lower().strip() for skill in skills]
-    except:
-        pass
-    return []
+    # Check each skill
+    for idx, skill in enumerate(normalized_job_skills):
+        # 1. Whole-word lexical match on resume
+        if skill_in_resume(skill, resume_normalized):
+            continue
 
-def score_resume(resume_skills: List[str], required_skills: List[str]) -> Tuple[int, List[str]]:
-    """Calculate resume score and missing skills."""
-    resume_set = set(resume_skills)
-    required_set = set(required_skills)
+        # 2. Semantic similarity vs. resume chunks
+        sim_chunk = util.cos_sim(skill_embeddings[idx], emb_chunks)
+        sim_resume = util.cos_sim(skill_embeddings[idx], emb_resume)
 
-    matched_skills = resume_set.intersection(required_set)
-    missing_skills = [skill for skill in required_skills if skill not in matched_skills]
+        # If not found lexically and below threshold for both, mark as missing
+        if torch.max(sim_chunk).item() < 0.55 and sim_resume.item() < 0.55:
+            missing.append(job_skills[idx])  # append original form
 
-    score = int((len(matched_skills) / max(len(required_skills), 1)) * 100)
-    return score, missing_skills
-
-def analyze_resume(resume_text: str, job_description: str) -> dict:
-    """Main function to analyze resume against job description."""
-    resume_skills = extract_skills_from_resume(resume_text)
-    required_skills = extract_required_skills_from_job(job_description)
-    score, missing_skills = score_resume(resume_skills, required_skills)
+    # Score interpretation
+    if score_val > 30:
+        reasoning = "✅ High similarity — resume aligns well with the job description."
+    elif score_val > 15:
+        reasoning = "⚠️ Moderate similarity — resume partially aligns; some skills may be missing."
+    else:
+        reasoning = "❌ Low similarity — resume lacks significant alignment with the JD."
 
     return {
-        "resume_score": score,
-        "matched_skills": list(set(resume_skills).intersection(set(required_skills))),
-        "missing_skills": missing_skills,
-        "built_by": "Chantibabusambangi"
+        **inputs,
+        "score": round(score_val, 2),
+        "missing_skills": missing,
+        "reasoning": reasoning
     }
+
+# Usage (for Langchain or standalone)
+resume_skill_match_agent = score_resume_vs_jd
