@@ -1,0 +1,63 @@
+#before
+🔍 Problem Summary
+You're using sentence embeddings to compare each job skill to chunks (sentences) from the resume. If the maximum cosine similarity of a skill to any sentence in the resume is below 0.55, the skill is marked as missing.
+
+This means:
+
+Even if a skill exists in the resume, it could be marked missing if it's not phrased similarly or semantically matching the skill keyword.
+
+👇 Why Skills Like “Python” or “SQL” Are Falsely Marked Missing
+Here’s how that happens:
+
+Your resume contains the skill in a list format under “Technical Skills” (e.g., Languages/Tools: C, C++, Python...)
+
+When the resume is tokenized into sentences, that entire list might be just one sentence or may not be semantically rich enough.
+
+The embedding for "Python" is compared to each sentence chunk. If the max similarity to any chunk is < 0.55 → it's labeled missing.
+
+But since "Python" may not appear in a full contextual sentence (like "I developed data pipelines using Python"), the embedding similarity is low.
+✅ How to Fix It
+Here are 3 improvement options, in increasing order of reliability:
+
+1. Add a fallback for exact keyword matching
+If an exact skill (case-insensitive) appears in the resume text, don't flag it as missing — even if embedding score is low.
+
+Add before the similarity check:
+
+python
+Copy
+Edit
+resume_text_lower = resume.lower()
+
+for i, skill_emb in enumerate(skill_embeddings):
+    skill_name = normalized_job_skills[i]
+    if skill_name in resume_text_lower:
+        continue  # Skill is present in raw text
+    sim_scores = util.cos_sim(skill_emb, emb_chunks)
+    if torch.max(sim_scores).item() < 0.55:
+        missing_skills.append(job_skills[i])
+2. Improve sentence chunking
+Right now you’re using simple_sent_tokenize() which splits by . , ? , etc. That may treat the entire "Technical Skills" block as one sentence.
+
+Try adding a step to split bullets, colons, and commas as well:
+
+python
+Copy
+Edit
+def enhanced_chunking(text: str) -> List[str]:
+    chunks = re.split(r'[•\n,;:.]', text)
+    return [chunk.strip() for chunk in chunks if chunk.strip()]
+Use this instead of simple_sent_tokenize() when generating resume_chunks.
+
+3. Boost chunk quality with section-aware extraction (Advanced)
+If your resumes follow a LaTeX or Markdown-like structure (like your screenshot), you could use regex or simple parsers to specifically extract and label technical skill sections, e.g.:
+
+python
+Copy
+Edit
+def extract_technical_skills(resume: str) -> List[str]:
+    match = re.search(r"Technical Skills.*?(?=\n[A-Z])", resume, re.DOTALL)
+    if match:
+        return re.split(r"[:,\n]", match.group())
+    return []
+Then append these skill lines to resume_chunks to ensure better semantic coverage.
