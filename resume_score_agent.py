@@ -1,80 +1,81 @@
+from crewai import Agent, Task, Crew
+from textwrap import dedent
 import os
-from dotenv import load_dotenv
-from groq import Groq
 
-# Load environment variables
-load_dotenv()
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+# You can replace this with any source of required skills
+REQUIRED_SKILLS = [
+    "Python", "TensorFlow", "PyTorch", "Scikit-learn", "Deep Learning",
+    "Machine Learning", "NLP", "CNN", "Data Analysis", "NumPy", "pandas",
+    "Matplotlib", "Transformer", "LLM", "AutoEncoder", "PCA", "GAN", "OpenCV",
+    "FastAPI", "Docker", "SQL", "Git"
+]
 
-# Groq client
-llm = Groq(api_key=GROQ_API_KEY)
+def resume_score_agent(resume_text):
+    from langchain.llms import Groq
+    from langchain.prompts import PromptTemplate
+    from langchain.chains import LLMChain
 
-# LangGraph-compatible node function
-def resume_skill_match_agent(state: dict) -> dict:
-    resume_text = state.get("resume_text", "")
-    jd_text = state.get("jd_text", "")
-    job_skills = state.get("job_skills", [])
+    llm = Groq(temperature=0.3, model_name="llama3-8b-8192")
 
-    if not resume_text or not jd_text or not job_skills:
-        return {
-            "score": 0.0,
-            "missing_skills": job_skills,
-            "reasoning": "Missing input data."
-        }
+    # Prompt to extract skills and compare
+    prompt = PromptTemplate(
+        input_variables=["resume_text", "required_skills"],
+        template=dedent("""
+        You are an expert resume evaluator.
 
-    # Prepare skills as bullet list
-    skills_bulleted = "\n".join(f"- {s}" for s in job_skills)
+        Below is a resume:
+        -----------------
+        {resume_text}
+        -----------------
 
-    prompt = f"""
-You are an expert technical recruiter and resume evaluator.
+        The required skills for the role are:
+        {required_skills}
 
-Your task is to:
-1. Read the RESUME and JOB DESCRIPTION.
-2. Compare the resume against the required skills.
-3. Give a score out of 100 indicating how well the resume matches the job.
-4. List all missing or weakly mentioned skills (even if mentioned only once or without detail).
+        Your job is to:
+        1. Extract all clearly and weakly mentioned skills from the resume.
+        2. Compare them with the required skills.
+        3. Return:
+            - A list of missing skills (include even if mentioned weakly).
+            - A resume score out of 10 based on relevance to required skills.
 
-Return result in this JSON format only (no explanation):
+        Respond in the following JSON format:
 
-{{
-  "score": <resume_score>,
-  "missing_skills": [<list_of_missing_skills_as_strings>]
-}}
+        {{
+            "extracted_skills": [...],
+            "missing_skills": [...],
+            "resume_score": x
+        }}
+        """)
+    )
 
---- RESUME START ---
-{resume_text}
---- RESUME END ---
+    chain = LLMChain(llm=llm, prompt=prompt)
 
---- JOB DESCRIPTION START ---
-{jd_text}
---- JOB DESCRIPTION END ---
+    result = chain.run({
+        "resume_text": resume_text,
+        "required_skills": ", ".join(REQUIRED_SKILLS)
+    })
 
---- JOB SKILLS ---
-{skills_bulleted}
---- END SKILLS ---
-"""
-
+    # Try to extract dictionary safely
+    import json
     try:
-        response = llm.chat.completions.create(
-            model="llama3-8b-8192",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
-            max_tokens=1024
-        )
-        content = response.choices[0].message.content.strip()
-
-        import json
-        parsed = json.loads(content)
-
-        # Validate and return safely
+        json_result = json.loads(result)
         return {
-            "score": float(parsed.get("score", 0.0)),
-            "missing_skills": parsed.get("missing_skills", [])
+            "extracted_skills": json_result.get("extracted_skills", []),
+            "missing_skills": json_result.get("missing_skills", []),
+            "resume_score": json_result.get("resume_score", 0)
         }
-
-    except Exception as e:
+    except json.JSONDecodeError:
+        # fallback: handle malformed LLM response
         return {
-            "score": 0.0,
-            "missing_skills": job_skills,
-            "reasoning": f"LLM error: {e}"
+            "extracted_skills": [],
+            "missing_skills": REQUIRED_SKILLS,
+            "resume_score": 0
         }
+from resume_score_agent import resume_score_agent
+
+resume_text = your_resume_text_input
+result = resume_score_agent(resume_text)
+
+st.write("✅ Extracted Skills:", result["extracted_skills"])
+st.write("❌ Missing Skills:", result["missing_skills"])
+st.write("📊 Resume Score:", result["resume_score"], "/10")
