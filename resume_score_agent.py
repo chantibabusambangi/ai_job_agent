@@ -1,55 +1,80 @@
 import os
-from groq import Groq
 from dotenv import load_dotenv
+from groq import Groq
 
-# Load API key from .env
+# Load environment variables
 load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
+# Groq client
 llm = Groq(api_key=GROQ_API_KEY)
 
-def query_llm(prompt: str) -> str:
-    response = llm.chat.completions.create(
-        model="llama3-8b-8192",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.2,
-        max_tokens=1024
-    )
-    return response.choices[0].message.content.strip()
+# LangGraph-compatible node function
+def resume_skill_match_agent(state: dict) -> dict:
+    resume_text = state.get("resume_text", "")
+    jd_text = state.get("jd_text", "")
+    job_skills = state.get("job_skills", [])
 
-def get_resume_score_and_missing_skills(resume_text: str, job_description: str):
+    if not resume_text or not jd_text or not job_skills:
+        return {
+            "score": 0.0,
+            "missing_skills": job_skills,
+            "reasoning": "Missing input data."
+        }
+
+    # Prepare skills as bullet list
+    skills_bulleted = "\n".join(f"- {s}" for s in job_skills)
+
     prompt = f"""
-You are a professional career assistant helping candidates improve their resumes.
+You are an expert technical recruiter and resume evaluator.
 
-Compare the following RESUME and JOB DESCRIPTION.
+Your task is to:
+1. Read the RESUME and JOB DESCRIPTION.
+2. Compare the resume against the required skills.
+3. Give a score out of 100 indicating how well the resume matches the job.
+4. List all missing or weakly mentioned skills (even if mentioned only once or without detail).
 
-1. Score the resume out of 100 based on:
-   - Skill match
-   - Relevance
-   - Clarity
-   - Technical depth
+Return result in this JSON format only (no explanation):
 
-2. Identify **missing or weakly represented skills** required in the job description but not well covered in the resume. Be strict – if a skill is only briefly mentioned, still list it.
-
-3. Return your response in the following format:
-
-Resume Score: <score>/100
-
-Missing Skills:
-- <Skill 1>
-- <Skill 2>
-...
+{{
+  "score": <resume_score>,
+  "missing_skills": [<list_of_missing_skills_as_strings>]
+}}
 
 --- RESUME START ---
 {resume_text}
 --- RESUME END ---
 
 --- JOB DESCRIPTION START ---
-{job_description}
+{jd_text}
 --- JOB DESCRIPTION END ---
+
+--- JOB SKILLS ---
+{skills_bulleted}
+--- END SKILLS ---
 """
+
     try:
-        response = query_llm(prompt)
-        return response
+        response = llm.chat.completions.create(
+            model="llama3-8b-8192",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
+            max_tokens=1024
+        )
+        content = response.choices[0].message.content.strip()
+
+        import json
+        parsed = json.loads(content)
+
+        # Validate and return safely
+        return {
+            "score": float(parsed.get("score", 0.0)),
+            "missing_skills": parsed.get("missing_skills", [])
+        }
+
     except Exception as e:
-        return f"Error occurred: {e}"
+        return {
+            "score": 0.0,
+            "missing_skills": job_skills,
+            "reasoning": f"LLM error: {e}"
+        }
